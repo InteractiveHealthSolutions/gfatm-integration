@@ -36,11 +36,15 @@ public class CrmIntegrationMain {
 	public static void main(String[] args) {
 
 		AppInitializer appInitializer = new AppInitializer();
-		appInitializer.readProperties();
-
+		if(!appInitializer.dbInitializer())
+		 {	
+			log.error(CustomMessage.getErrorMessage(ErrorType.FAILED_TO_CONNECT));
+	        System.exit(-1);
+	      }
+		
 		CrmIntegrationMain main = new CrmIntegrationMain();
 		JSONObject obj = main.dateSlice();
-		log.info("EndUpResult:- " + obj);
+		log.info("End Up Result : " + obj);
 		System.exit(0);
 	}
   
@@ -53,11 +57,10 @@ public class CrmIntegrationMain {
 		JSONObject returnVal = new JSONObject();
 		try {
 			currentDate = new LocalDate();
-			lastDate = ServerService.getInstance().getLastDate();
+			lastDate = "2018-01-24";//ServerService.getInstance().getLastEnteredDate();
 
 			days = Days.daysBetween(new LocalDate(lastDate),
 					new LocalDate(currentDate)).getDays();
-
 			long numberIteration = days / Constant.maxDays;
 			JSONArray jsonArray = new JSONArray();
 			int exceedDays = 0;
@@ -80,7 +83,7 @@ public class CrmIntegrationMain {
 			}
 			returnVal = new JSONObject();
 			returnVal.put("Results", jsonArray);
-		} catch (SQLException e) {
+		} catch (Exception e) {
 			log.error(e.getMessage());
 			System.exit(-1);//in case of any error this should be shutdown the thread.
 		}
@@ -89,7 +92,6 @@ public class CrmIntegrationMain {
 
 	public JSONObject getRequestForObject(String lastDate, String currentDate) {
 
-		JSONObject jsonResponse = new JSONObject();
 		JSONObject returnResponse = new JSONObject();
 		JSONArray resultDataList = null;
 		try {
@@ -99,16 +101,15 @@ public class CrmIntegrationMain {
 						+ currentDate,AppManager.getInstance().getAuthKey());	
 				// In 'No record found' case against the date range, then we return respective message.
 				if (resultDataList == null || resultDataList.length() == 0) {
-						jsonResponse.put("response",CustomMessage.getErrorMessage(ErrorType.NO_DATA_RECEIVED));
-						returnResponse = jsonResponse;
+					  returnResponse.put("response",CustomMessage.getErrorMessage(ErrorType.NO_DATA_RECEIVED));
 				} else {
 					returnResponse = execute(resultDataList);
 				}
-		 } catch (IOException e1) {
-				e1.printStackTrace();
+		 } catch (IOException ex) {
+			  returnResponse.put("response",ex.getMessage());
 		 } catch (JSONException e) {
-				e.printStackTrace();
-			}
+			 returnResponse.put("response",e.getMessage());
+		 }
 		
 	return returnResponse;
 	}
@@ -120,7 +121,6 @@ public class CrmIntegrationMain {
 		JSONObject object = null;
 		for (int i = 0; i < data.length(); i++) {
 			try {
-				
 				object = (JSONObject) data.get(i);
 				if (object.isNull("uuid")) {
 					result = CustomMessage.getErrorMessage(ErrorType.NULL_VALUE);

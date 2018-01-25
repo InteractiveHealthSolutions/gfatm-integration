@@ -36,10 +36,9 @@ import com.ihsinformatics.gfatm.integration.shared.AppManager;
 import com.ihsinformatics.util.CommandType;
 import com.ihsinformatics.util.DatabaseUtil;
 import com.ihsinformatics.util.DateTimeUtil;
-import com.ihsinformatics.util.JsonUtil;
 
 /**
- * @author Shujaat
+ * @author Shujaat 
  *
  */
 
@@ -155,7 +154,6 @@ public class ServerService {
 		} catch (ParseException e) {
 			e.printStackTrace();
 		}
-		
 		StringBuilder query = new StringBuilder(
 				"INSERT INTO  user_form (user_form_id,user_form_type_id ,user_id, duration_seconds, date_entered ,date_created,created_by ,created_at ,date_changed , changed_by , changed_at , uuid) VALUES ");
 		query.append("(0,'" + Constant.ccCrmUserFormType);
@@ -178,7 +176,7 @@ public class ServerService {
 			errorMessage = e.getMessage();
 		}
 		if (userFormId == -1)
-			return "ERROR :"+errorMessage;
+			return "ERROR : "+errorMessage;
 		else
 			return saveUserFormResult(userFormId, dataObject);
 	}
@@ -194,7 +192,6 @@ public class ServerService {
 			String name = names.getString(i);
 			Integer elementId;
 		 if (name.equals("manual_call_detail")) {
-
 				JSONArray manualCallDetails = data
 						.getJSONArray("manual_call_detail");
 				if (manualCallDetails.length()>=1) {
@@ -247,7 +244,7 @@ public class ServerService {
 	 * @return
 	 * @throws SQLException
 	 */
-	public String getLastDate() throws SQLException {
+	public String getLastEnteredDate() throws SQLException {
 		String lastDate = "";
 		String query = "SELECT MAX(date(date_entered)) as date_entered FROM user_form where user_form_type_id =9";
 
@@ -359,7 +356,6 @@ public class ServerService {
 			ResultSet rs = ps.getGeneratedKeys();
 			if (rs.next()) {
 				userFormResultId = rs.getInt(1);
-				System.out.println("Saved : "+userFormResultId);
 				log.info("Inserted : "+userFormResultId);
 			}
 			rs.close();

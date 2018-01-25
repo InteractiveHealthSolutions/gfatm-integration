@@ -37,7 +37,7 @@ public class AppInitializer {
 		}
 	}
 	
-	public boolean readProperties() throws NumberFormatException {
+	public boolean dbInitializer(){
 		
 		String dbUsername = prop.getProperty("connection.username");
 		String dbPassword = prop.getProperty("connection.password");
@@ -48,16 +48,20 @@ public class AppInitializer {
 				.getProperty("connection.driver_class");
 		dbUtil = new DatabaseUtil(url, dbName, driverName, dbUsername,
 				dbPassword);
+		if(!dbUtil.tryConnection()){
+			return false;
+		  }
 		baseUrl = prop.getProperty("callcenter.baseUrl");
 		apiKey = prop.getProperty("callcenter.authKey");
 		userForm = prop.getProperty("callcenter.userForm");
 		userId = prop.getProperty("callcenter.userId");
 		setValue();
+		
     return true;
 	}
 	
 	public void setValue(){
-		//The properties fields introduce the application manager.
+		//The properties fields introduce to the application manager.
 		AppManager.getInstance().setDatabaseUtil(dbUtil);
 		AppManager.getInstance().setAuthKey(apiKey);
 		AppManager.getInstance().setBaseUrl(baseUrl);

@@ -123,10 +123,16 @@ public class CustomMessage {
 			break;
 		case INVALID_VALUE:
 			error = "The provided value is Invalid";
+			break;
 		case INTERNET_CONNECTION_ERROR:
 			error ="Currently internet Connection is not available";
+			break;
 		case NO_DATA_RECEIVED:
 			error = "No data received – err empty response";
+			break;
+		case FAILED_TO_CONNECT:
+			error = "Failed to connect with local database. Exiting";
+			break;
 		}
 		return error;
 	}
