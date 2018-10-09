@@ -11,17 +11,86 @@ Interactive Health Solutions, hereby disclaims all copyright interest in this pr
 */
 package com.ihsinformatics.gfatm.integration.cad4tb;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Date;
+import java.util.Properties;
+
+import org.apache.log4j.Logger;
+import org.joda.time.DateTime;
+
+import com.ihsinformatics.util.DateTimeUtil;
+
 /**
  * @author owais.hussain@ihsinformatics.com
  *
  */
 public class Cad4tbMain {
 
-	/**
-	 * @param args
-	 */
+	private static final Logger log = Logger.getLogger(Cad4tbMain.class);
+	private static final String PROP_FILE_NAME = "gfatm-cad4tb-integration.properties";
+
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
+		try {
+			boolean doImportAll = false;
+			boolean doRestrictDate = false;
+			// Check arguments first
+			// -a to import all results day-by-day
+			// -r to import results for a specific date
+			// server
+			// -h or -help or --help or -? to display parameters
+			Date forDate = null;
+			for (int i = 0; i < args.length; i++) {
+				if (args[i].equals("-h") || args[i].equals("-help") || args[i].equals("--help")
+						|| args[i].equals("-?")) {
+					StringBuilder usage = new StringBuilder();
+					usage.append("Command usage:\r\n");
+					usage.append("-a to import all results day-by-day\r\n");
+					usage.append(
+							"-r to import all results for a specific date (yyyy-MM-dd). E.g. gfatm-cad4tb-integration-xxx.jar -r 2017-12-31\r\n");
+					usage.append("-h or -help or --help or -? to display parameters on console\r\n");
+					usage.append("NO parameters to auto-import from last encounter date to current date\r\n");
+					log.info(usage.toString());
+					return;
+				} else if (args[i].equals("-a")) {
+					doImportAll = true;
+				} else if (args[i].equals("-r")) {
+					doRestrictDate = true;
+					forDate = DateTimeUtil.fromSqlDateString(args[i + 1]);
+					if (forDate == null) {
+						log.fatal(
+								"Invalid date provided. Please specify date in SQL format without quotes, i.e. yyyy-MM-dd");
+						System.exit(-1);
+					}
+				}
+			}
+			Cad4tbImportService service = new Cad4tbImportService(readProperties());
+			// Import all results
+			if (doImportAll) {
+				service.importAll();
+			} else if (doRestrictDate) {
+				service.importForDate(new DateTime(forDate.getTime()));
+			} else {
+				service.importAuto();
+			}
+			log.info("Import process complete.");
+		} catch (Exception e) {
+			log.error(e.getMessage());
+			System.exit(-1);
+		}
+		System.exit(0);
+	}
+
+	/**
+	 * Read properties from file
+	 * 
+	 * @throws IOException
+	 */
+	public static Properties readProperties() throws IOException {
+		InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(PROP_FILE_NAME);
+		Properties properties = new Properties();
+		properties.load(inputStream);
+		return properties;
 	}
 
 }
