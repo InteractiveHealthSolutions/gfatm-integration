@@ -13,6 +13,7 @@ Interactive Health Solutions, hereby disclaims all copyright interest in this pr
 package com.ihsinformatics.gfatm.integration.cad4tb;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
@@ -29,6 +30,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+
+import javax.net.ssl.HttpsURLConnection;
 
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
@@ -57,11 +60,17 @@ public class Cad4tbImportService {
 	private int cad4tbUserId;
 	private int fetchDurationHours;
 	private int fetchDelay = 100;
+	private String baseUrl = null;
+	private String username = null;
+	private String password = null;
 
 	public Cad4tbImportService(Properties properties) {
 		this.properties = properties;
 		fetchDurationHours = Integer.parseInt(properties.getProperty("cad4tb.fetch_duration_hours", "24"));
 		fetchDelay = Integer.parseInt(properties.getProperty("cad4tb.fetch_delay", "100"));
+		baseUrl = properties.getProperty("cad4tb.url");
+		username = properties.getProperty("cad4tb.username");
+		password = properties.getProperty("cad4tb.password");
 		initDatabase();
 		setXRayUser();
 	}
@@ -188,32 +197,24 @@ public class Cad4tbImportService {
 	 */
 	public void run(DateTime start, DateTime end) throws MalformedURLException, InstantiationException,
 			IllegalAccessException, ClassNotFoundException, SQLException {
-		StringBuilder param = new StringBuilder();
-		param.append("start=" + DateTimeUtil.toSqlDateString(start.toDate()));
-		param.append("&end=" + DateTimeUtil.toSqlDateString(end.toDate()));
-		String baseUrl = properties.getProperty("cad4tb.url");
-		String apiKey = properties.getProperty("cad4tb.api_key");
-		String authentication = properties.getProperty("cad4tb.authentication");
-		JSONArray results = getXrayResults(baseUrl, apiKey, authentication, param.toString());
-		if (results.length() == 0) {
-			log.warn("No result found between " + start + " and " + end);
-			return;
-		}
-		for (int i = 0; i < results.length(); i++) {
-			JSONObject result = results.getJSONObject(i);
-			// Save X-Ray result in OpenMRS
-			XRayResult xrayResult = new XRayResult();
-			try {
-				xrayResult.fromJson(result);
-				processResult(xrayResult);
-				// Add a fetchDelay between two iterations
+		// Fetch PatientIDs from Encounters between start and end
+		String[] patientIds = { "0", "1", "2", "012345", "2239833", "1078617" };
+		for (String patientId : patientIds) {
+			List<XRayResult> results = getXrayResultsByPatientId(patientId);
+			if (results == null) {
+				continue;
+			}
+			for (XRayResult xrayResult : results) {
 				try {
-					Thread.sleep(fetchDelay);
-				} catch (Exception e) {
-					log.error(e.getMessage());
+					processResult(xrayResult);
+					try {
+						Thread.sleep(fetchDelay);
+					} catch (Exception e) {
+						log.error(e.getMessage());
+					}
+				} catch (Exception e1) {
+					log.error(e1.getMessage());
 				}
-			} catch (Exception e1) {
-				log.error(e1.getMessage());
 			}
 		}
 	}
@@ -305,41 +306,103 @@ public class Cad4tbImportService {
 	/**
 	 * Fetch results from XRayResults using API
 	 * 
-	 * @param queryString
+	 * @param patientId
 	 * @return
 	 * @throws MalformedURLException
 	 * @throws JSONException
 	 */
-	public JSONArray getXrayResults(String baseUrl, String apiKey, String authentication, String queryString)
-			throws MalformedURLException, JSONException {
-		URL url = new URL(baseUrl + "/test?" + queryString);
-		HttpURLConnection conn = null;
-		StringBuilder response = null;
+	public List<XRayResult> getXrayResultsByPatientId(String patientId) throws MalformedURLException, JSONException {
 		try {
-			conn = (HttpURLConnection) url.openConnection();
+			StringBuilder params = new StringBuilder();
+			params.append("Archive=" + Constant.ARCHIVE_NAME);
+			params.append("&PatientID=" + patientId);
+			params.append("&Project=" + Constant.CAD4TB_API_PROJECT_NAME);
+
+			// First fetch patient studies
+			String url = baseUrl + "patient/studies/list/?" + params.toString();
+			JSONArray studies = new JSONArray(httpsGet(url));
+			JSONObject study = studies.getJSONObject(0);
+
+			// Now fetch series for this study
+			params.append("&StudyInstanceUID=" + study.getString("StudyInstanceUID"));
+			url = baseUrl + "patient/study/series/list/?" + params.toString();
+			JSONArray serieses = new JSONArray(httpsGet(url));
+			JSONObject series = serieses.getJSONObject(0);
+
+			// Finally retrieve the results for this series
+			params.append("&SeriesInstanceUID=" + series.getString("SeriesInstanceUID"));
+			params.append("&Type=" + Constant.TEST_TYPE);
+			params.append("&Results=CAD4TB%205");
+			url = baseUrl + "/series/results/?" + params.toString();
+			JSONArray results = new JSONArray(httpsGet(url));
+			if (results.length() == 0) {
+				return null;
+			}
+			List<XRayResult> xrays = new ArrayList<>();
+			for (int i = 0; i < results.length(); i++) {
+				JSONObject result = results.getJSONObject(i);
+				result.put("Study", study);
+				result.put("Series", series);
+				XRayResult xray = jsonToXrayResult(result);
+				// Set the remaining parameters
+				xray.setPatientId(patientId);
+				if (xray.getCad4tbScore() < 70D) {
+					xray.setCad4tbScoreRange(Constant.NORMAL_SCORE_RANGE_CONCEPT);
+					xray.setPresumptiveTbCase(Constant.NO_CONCEPT);
+				} else {
+					xray.setCad4tbScoreRange(Constant.ABNORMAL_SCORE_RANGE_CONCEPT);
+					xray.setPresumptiveTbCase(Constant.YES_CONCEPT);
+				}
+				xrays.add(xray);
+			}
+			return xrays;
+		} catch (Exception e) {
+		}
+		return null;
+	}
+
+	private XRayResult jsonToXrayResult(JSONObject json) throws ParseException {
+		XRayResult xray = new XRayResult();
+		JSONObject study = json.getJSONObject("Study");
+		JSONObject series = json.getJSONObject("Series");
+		xray.setStudyId(study.getString("StudyInstanceUID"));
+		xray.setSeriesId(series.getString("StudySeriesUID"));
+		xray.setCad4tbScore(json.getDouble("value"));
+		xray.setPatientId(json.getString("PatientID"));
+		String modifiedDate = series.getString("modified");
+		xray.setTestResultDate(DateTimeUtil.fromString(modifiedDate, DateTimeUtil.detectDateFormat(modifiedDate)));
+		return xray;
+	}
+
+	public String httpsGet(String urlAddress) throws MalformedURLException {
+		URL url = new URL(urlAddress);
+		try {
+			HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
 			conn.setRequestMethod("GET");
-			conn.setRequestProperty("Authorization", authentication + " " + apiKey);
+			conn.setRequestProperty("Content-Type", "application/json");
+			conn.setRequestProperty("X-USERNAME", username);
+			conn.setRequestProperty("X-PASSWORD", password);
 			conn.setDoOutput(true);
+
+			// Read the response
 			int responseCode = conn.getResponseCode();
 			if (responseCode != HttpURLConnection.HTTP_OK) {
-				log.error("Response code: " + responseCode);
+				System.out.println("Response code: " + responseCode);
 			}
 			InputStream inputStream = conn.getInputStream();
 			InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
 			BufferedReader br = new BufferedReader(inputStreamReader);
-			response = new StringBuilder();
+			StringBuilder response = new StringBuilder();
 			String str = null;
 			while ((str = br.readLine()) != null) {
 				response.append(str);
 			}
 			conn.disconnect();
-		} catch (Exception e) {
-			log.error(e.getMessage());
+			return response.toString();
+		} catch (MalformedURLException e) {
+		} catch (IOException e) {
 		}
-		if (response == null) {
-			return null;
-		}
-		return new JSONArray(response.toString());
+		return null;
 	}
 
 	/**
