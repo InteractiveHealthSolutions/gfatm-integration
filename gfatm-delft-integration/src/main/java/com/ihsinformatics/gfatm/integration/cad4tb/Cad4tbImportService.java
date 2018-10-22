@@ -51,6 +51,7 @@ import com.ihsinformatics.util.DateTimeUtil;
  */
 public class Cad4tbImportService {
 
+	private static final Double NORMAL_CUTOFF_SCORE = 70D;
 	private static final Logger log = Logger.getLogger(Cad4tbImportService.class);
 	private static boolean testMode = false;
 
@@ -66,7 +67,7 @@ public class Cad4tbImportService {
 
 	public Cad4tbImportService(Properties properties) {
 		this.properties = properties;
-		fetchDurationHours = Integer.parseInt(properties.getProperty("cad4tb.fetch_duration_hours", "24"));
+		fetchDurationHours = Integer.parseInt(properties.getProperty("cad4tb.fetch_duration_hours", "120"));
 		fetchDelay = Integer.parseInt(properties.getProperty("cad4tb.fetch_delay", "100"));
 		baseUrl = properties.getProperty("cad4tb.url");
 		username = properties.getProperty("cad4tb.username");
@@ -122,8 +123,7 @@ public class Cad4tbImportService {
 	public void importAuto() throws MalformedURLException, JSONException, InstantiationException,
 			IllegalAccessException, ClassNotFoundException, ParseException, SQLException {
 		StringBuilder query = new StringBuilder();
-		query.append(
-				"select ifnull(max(encounter_datetime), (select min(encounter_datetime) from encounter)) as max_date from encounter where encounter_type = ");
+		query.append("select max(encounter_datetime) as max_date from encounter where encounter_type = ");
 		query.append(Constant.XRAY_ENCOUNTER_TYPE);
 		// Also restrict to the results entered by CAD4TB user
 		query.append(" and ");
@@ -197,24 +197,40 @@ public class Cad4tbImportService {
 	 */
 	public void run(DateTime start, DateTime end) throws MalformedURLException, InstantiationException,
 			IllegalAccessException, ClassNotFoundException, SQLException {
-		// Fetch PatientIDs from Encounters between start and end
-		String[] patientIds = { "0", "1", "2", "012345", "2239833", "1078617" };
-		for (String patientId : patientIds) {
-			List<XRayResult> results = getXrayResultsByPatientId(patientId);
-			if (results == null) {
+		// Fetch Encounters between start and end
+		StringBuilder query = new StringBuilder();
+		query.append(
+				"select distinct e.encounter_id, e.patient_id, pid.identifier, e.location_id, e.encounter_datetime, e.date_created, ord.value_text as order_id from encounter as e ");
+		query.append(
+				"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
+						+ Constant.ORDER_ID_CONCEPT + " ");
+		query.append(
+				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
+		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
+//		query.append("and timestampdiff(HOUR, e.date_created, current_timestamp()) <= " + fetchDurationHours);
+		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
+		for (Object[] order : xrayOrders) {
+			int k = 0;
+			Integer encounterId = Integer.parseInt(order[k++].toString());
+			Integer patientId = Integer.parseInt(order[k++].toString());
+			String patientIdentifier = order[k++].toString();
+			Integer locationId = Integer.parseInt(order[k++].toString());
+			Date encounterDatetime = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
+			Date dateCreated = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
+			String orderId = order[k++].toString();
+			XRayResult result = getXrayResultsByOrder(patientIdentifier, encounterDatetime);
+			if (result == null) {
 				continue;
 			}
-			for (XRayResult xrayResult : results) {
+			try {
+				processResult(result);
 				try {
-					processResult(xrayResult);
-					try {
-						Thread.sleep(fetchDelay);
-					} catch (Exception e) {
-						log.error(e.getMessage());
-					}
-				} catch (Exception e1) {
-					log.error(e1.getMessage());
+					Thread.sleep(fetchDelay);
+				} catch (Exception e) {
+					log.error(e.getMessage());
 				}
+			} catch (Exception e1) {
+				log.error(e1.getMessage());
 			}
 		}
 	}
@@ -304,14 +320,17 @@ public class Cad4tbImportService {
 	}
 
 	/**
-	 * Fetch results from XRayResults using API
+	 * Fetch results from XRayResults using API. Business logic: The returned X-ray
+	 * result is the one which was performed right after the orderDate. If there are
+	 * multiple results for same date, then the latest one is picked
 	 * 
-	 * @param patientId
+	 * @param patientId,
 	 * @return
 	 * @throws MalformedURLException
 	 * @throws JSONException
 	 */
-	public List<XRayResult> getXrayResultsByPatientId(String patientId) throws MalformedURLException, JSONException {
+	public XRayResult getXrayResultsByOrder(String patientId, Date orderDate)
+			throws MalformedURLException, JSONException {
 		try {
 			StringBuilder params = new StringBuilder();
 			params.append("Archive=" + Constant.ARCHIVE_NAME);
@@ -344,9 +363,12 @@ public class Cad4tbImportService {
 				result.put("Study", study);
 				result.put("Series", series);
 				XRayResult xray = jsonToXrayResult(result);
-				// Set the remaining parameters
+				// Keep only the X-rays done after the order date
+				if (xray.getTestResultDate().before(orderDate)) {
+					continue;
+				}
 				xray.setPatientId(patientId);
-				if (xray.getCad4tbScore() < 70D) {
+				if (xray.getCad4tbScore() < NORMAL_CUTOFF_SCORE) {
 					xray.setCad4tbScoreRange(Constant.NORMAL_SCORE_RANGE_CONCEPT);
 					xray.setPresumptiveTbCase(Constant.NO_CONCEPT);
 				} else {
@@ -355,12 +377,28 @@ public class Cad4tbImportService {
 				}
 				xrays.add(xray);
 			}
-			return xrays;
+			XRayResult result = null;
+			// Return the latest X-ray in the group
+			for (XRayResult xRayResult : xrays) {
+				if (result == null) {
+					result = xRayResult;
+				} else if (xRayResult.getTestResultDate().after(result.getTestResultDate())) {
+					result = xRayResult;
+				}
+			}
+			return result;
 		} catch (Exception e) {
 		}
 		return null;
 	}
 
+	/**
+	 * Parse X-ray Results from JSON object
+	 * 
+	 * @param json
+	 * @return
+	 * @throws ParseException
+	 */
 	private XRayResult jsonToXrayResult(JSONObject json) throws ParseException {
 		XRayResult xray = new XRayResult();
 		JSONObject study = json.getJSONObject("Study");

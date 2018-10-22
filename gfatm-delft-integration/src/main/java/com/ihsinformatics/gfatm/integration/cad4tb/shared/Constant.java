@@ -26,7 +26,11 @@ public final class Constant {
 	public static final String ARCHIVE_NAME = "archive-test";
 	public static final String CAD4TB_API_PROJECT_NAME = "api-test-project";
 	public static final String TEST_TYPE = "cad4tb";
+
+	public static final int XRAY_ORDER_ENCOUNTER_TYPE = 185;
 	public static final int XRAY_ENCOUNTER_TYPE = 186;
+	public static final int ORDER_ID_CONCEPT = 165715;
+
 	public static final int XRAY_RESULT_CONCEPT = 162202;
 	public static final int ERROR_CONCEPT = 165361;
 	public static final int CAD4TB_CONCEPT = 164306;
