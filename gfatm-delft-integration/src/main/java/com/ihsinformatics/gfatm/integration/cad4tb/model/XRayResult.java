@@ -14,6 +14,12 @@ package com.ihsinformatics.gfatm.integration.cad4tb.model;
 import java.io.Serializable;
 import java.util.Date;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
+import com.ihsinformatics.util.DateTimeUtil;
+
 import lombok.Data;
 
 /**
@@ -23,6 +29,7 @@ import lombok.Data;
 public @Data class XRayResult implements Serializable {
 
 	private static final long serialVersionUID = -2396853698753897234L;
+	private static final String DATE_FORMAT = DateTimeUtil.ISO8601;
 	private String patientId;
 	private String studyId;
 	private String seriesId;
@@ -39,4 +46,23 @@ public @Data class XRayResult implements Serializable {
 	private String chestXRay;
 	private Integer presumptiveTbCase;
 	private Date returnVisitDate;
+
+	/**
+	 * Convert JSON object into XRayResult object
+	 * 
+	 * @param json
+	 * @return
+	 */
+	public static XRayResult fromJson(JSONObject json) throws JSONException {
+		XRayResult xray = new XRayResult();
+		JSONObject study = json.getJSONObject("Study");
+		JSONObject series = json.getJSONObject("Series");
+		xray.setStudyId(study.getString("StudyInstanceUID"));
+		xray.setSeriesId(series.getString("SeriesInstanceUID"));
+		xray.setCad4tbScore(json.getDouble("value"));
+		xray.setPatientId(json.getString("PatientID"));
+		String modifiedDate = series.getString("modified");
+		xray.setTestResultDate(DateTimeUtil.fromString(modifiedDate, Constant.DATE_FORMAT));
+		return xray;
+	}
 }

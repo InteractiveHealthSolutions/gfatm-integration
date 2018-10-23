@@ -12,6 +12,8 @@ Interactive Health Solutions, hereby disclaims all copyright interest in this pr
 
 package com.ihsinformatics.gfatm.integration.cad4tb.shared;
 
+import com.ihsinformatics.util.DateTimeUtil;
+
 /**
  * @author owais.hussain@ihsinformatics.com
  *
@@ -22,6 +24,7 @@ public final class Constant {
 		// Hide the implicit public interface
 	}
 
+	public static final String DATE_FORMAT = DateTimeUtil.ISO8601;
 	public static final String PATIENT_ID_REGEX = "^[A-Za-z0-9]{5}\\-[0-9]$";
 	public static final String ARCHIVE_NAME = "archive-test";
 	public static final String CAD4TB_API_PROJECT_NAME = "api-test-project";

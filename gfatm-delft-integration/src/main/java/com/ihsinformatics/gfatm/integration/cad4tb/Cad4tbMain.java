@@ -13,6 +13,7 @@ package com.ihsinformatics.gfatm.integration.cad4tb;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.management.ManagementFactory;
 import java.util.Date;
 import java.util.Properties;
 
@@ -27,6 +28,8 @@ import com.ihsinformatics.util.DateTimeUtil;
  */
 public class Cad4tbMain {
 
+	public static final boolean DEBUG_MODE = ManagementFactory.getRuntimeMXBean().getInputArguments().toString()
+			.indexOf("-agentlib:jdwp") > 0;
 	private static final Logger log = Logger.getLogger(Cad4tbMain.class);
 	private static final String PROP_FILE_NAME = "gfatm-cad4tb-integration.properties";
 
