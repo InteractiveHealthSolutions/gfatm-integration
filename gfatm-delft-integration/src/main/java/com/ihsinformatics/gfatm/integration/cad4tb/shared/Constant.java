@@ -26,21 +26,20 @@ public final class Constant {
 
 	public static final String DATE_FORMAT = DateTimeUtil.ISO8601;
 	public static final String PATIENT_ID_REGEX = "^[A-Za-z0-9]{5}\\-[0-9]$";
-	public static final String ARCHIVE_NAME = "archive-test";
-	public static final String CAD4TB_API_PROJECT_NAME = "api-test-project";
 	public static final String TEST_TYPE = "cad4tb";
 
 	public static final int XRAY_ORDER_ENCOUNTER_TYPE = 185;
-	public static final int XRAY_ENCOUNTER_TYPE = 186;
-	public static final int ORDER_ID_CONCEPT = 165715;
+	public static final int XRAY_RESULT_ENCOUNTER_TYPE = 186;
 
-	public static final int XRAY_RESULT_CONCEPT = 162202;
-	public static final int ERROR_CONCEPT = 165361;
+	public static final int ORDER_ID_CONCEPT = 165715;
+	public static final int XRAY_RESULT_CONCEPT = 164373;
 	public static final int CAD4TB_CONCEPT = 164306;
-	public static final int ERROR_CODE_CONCEPT = 164348;
+	public static final int CAD4TB_SCORE_RANGE_CONCEPT = 165802;
+	public static final int PRESUMPTIVE_TB_CXR_CONCEPT = 165835;
 
 	public static final int NORMAL_SCORE_RANGE_CONCEPT = 165800;
 	public static final int ABNORMAL_SCORE_RANGE_CONCEPT = 165801;
+
 	public static final int YES_CONCEPT = 1065;
 	public static final int NO_CONCEPT = 1066;
 

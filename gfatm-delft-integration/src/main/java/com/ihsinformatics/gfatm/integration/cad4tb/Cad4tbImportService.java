@@ -24,6 +24,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
@@ -56,6 +57,8 @@ public class Cad4tbImportService {
 	private String baseUrl = null;
 	private String username = null;
 	private String password = null;
+	private String archiveName = null;
+	private String projectName = null;
 
 	public Cad4tbImportService(Properties properties) {
 		this.properties = properties;
@@ -64,6 +67,8 @@ public class Cad4tbImportService {
 		baseUrl = properties.getProperty("cad4tb.url");
 		username = properties.getProperty("cad4tb.username");
 		password = properties.getProperty("cad4tb.password");
+		archiveName = properties.getProperty("cad4tb.archive");
+		projectName = properties.getProperty("cad4tb.project");
 		initDatabase();
 		setXRayUser();
 	}
@@ -91,7 +96,7 @@ public class Cad4tbImportService {
 	private void setXRayUser() {
 		String username = properties.getProperty("cad4tb.openmrs.username");
 		Object userId = dbUtil.runCommand(CommandType.SELECT,
-				"select user_id from openmrs.users where username = '" + username + "'");
+				"select user_id from users where username = '" + username + "'");
 		if (userId != null) {
 			cad4tbUserId = Integer.parseInt(userId.toString());
 			return;
@@ -116,7 +121,7 @@ public class Cad4tbImportService {
 			IllegalAccessException, ClassNotFoundException, ParseException, SQLException {
 		StringBuilder query = new StringBuilder();
 		query.append("select max(encounter_datetime) as max_date from encounter where encounter_type = ");
-		query.append(Constant.XRAY_ENCOUNTER_TYPE);
+		query.append(Constant.XRAY_RESULT_ENCOUNTER_TYPE);
 		// Also restrict to the results entered by CAD4TB user
 		query.append(" and ");
 		query.append("creator = " + cad4tbUserId);
@@ -146,7 +151,7 @@ public class Cad4tbImportService {
 			ClassNotFoundException, ParseException, SQLException {
 		String dateStr = dbUtil.getValue(
 				"select ifnull(max(encounter_datetime), (select min(encounter_datetime) from encounter)) as max_date from encounter where encounter_type = "
-						+ Constant.XRAY_ENCOUNTER_TYPE);
+						+ Constant.XRAY_RESULT_ENCOUNTER_TYPE);
 		DateTime start = new DateTime(DateTimeUtil.fromSqlDateString(dateStr));
 		DateTime end = start.plusDays(1);
 		while (end.isBeforeNow()) {
@@ -192,7 +197,7 @@ public class Cad4tbImportService {
 		// Fetch Encounters between start and end
 		StringBuilder query = new StringBuilder();
 		query.append(
-				"select distinct e.encounter_id, e.patient_id, pid.identifier, e.location_id, e.encounter_datetime, e.date_created, ord.value_text as order_id from encounter as e ");
+				"select distinct e.patient_id, pid.identifier, e.location_id, e.encounter_datetime, e.date_created, ord.value_text as order_id from encounter as e ");
 		query.append(
 				"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
 						+ Constant.ORDER_ID_CONCEPT + " ");
@@ -200,26 +205,34 @@ public class Cad4tbImportService {
 				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
 		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
 		if (Cad4tbMain.DEBUG_MODE) {
-			query.append("and e.patient_id in (select patient_id from patient_identifier where identifier = '012345')");
+			// query.append("and e.patient_id in (select patient_id from patient_identifier
+			// where identifier = '012345')");
+			query.append("and timestampdiff(HOUR, e.date_created, current_timestamp()) <= " + fetchDurationHours);
 		} else {
 			query.append("and timestampdiff(HOUR, e.date_created, current_timestamp()) <= " + fetchDurationHours);
 		}
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
 		for (Object[] order : xrayOrders) {
 			int k = 0;
-			Integer encounterId = Integer.parseInt(order[k++].toString());
 			Integer patientId = Integer.parseInt(order[k++].toString());
 			String patientIdentifier = order[k++].toString();
 			Integer locationId = Integer.parseInt(order[k++].toString());
 			Date encounterDatetime = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
-			Date dateCreated = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
+			// Date dateCreated = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
 			String orderId = order[k++].toString();
+			if (Cad4tbMain.DEBUG_MODE) {
+				String[] testIds = { "0", "012345", "1078617" };
+				int random = ThreadLocalRandom.current().nextInt(0, testIds.length + 1);
+				patientIdentifier = testIds[random];
+				encounterDatetime = DateTimeUtil.fromSqlDateTimeString("2017-09-23 00:00:00");
+			}
 			XRayResult xRayResult = getXrayResultByOrder(patientIdentifier, encounterDatetime);
 			if (xRayResult == null) {
 				continue;
 			}
+			xRayResult.setOrderId(orderId);
 			try {
-				boolean success = processResult(xRayResult);
+				boolean success = processResult(xRayResult, patientId, locationId);
 				log.info("Imported result for " + xRayResult.getPatientId() + (success ? ": YES" : ": NO"));
 				try {
 					Thread.sleep(fetchDelay);
@@ -237,46 +250,40 @@ public class Cad4tbImportService {
 	 * checks
 	 * 
 	 * @param xRayResult
+	 * @param locationId
 	 * @return
 	 * @throws InstantiationException
 	 * @throws IllegalAccessException
 	 * @throws ClassNotFoundException
 	 * @throws SQLException
 	 */
-	public boolean processResult(XRayResult xRayResult)
+	public boolean processResult(XRayResult xRayResult, Integer patientId, Integer locationId)
 			throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
-		// Skip if the Patient ID scheme does not match
-		if (!xRayResult.getPatientId().matches(Constant.PATIENT_ID_REGEX)) {
+		// Skip if the Patient ID scheme does not match\
+		if (!Cad4tbMain.DEBUG_MODE && !xRayResult.getPatientId().matches(Constant.PATIENT_ID_REGEX)) {
 			log.warn("Patient ID " + xRayResult.getPatientId() + " is invalid!");
 			return false;
 		}
-		// Fetch patient ID against the given identifier in GXP test
+		// Fetch patient ID against the given identifier in CXR test
 		log.info("Searching for Patient...");
 		if (dbUtil == null) {
 			initDatabase();
 		}
-		Object[] record = dbUtil.getRecord("openmrs.patient_identifier", "patient_id, location_id",
-				"where identifier='" + xRayResult.getPatientId() + "'");
-		Object patientIdentifier = record[0];
-		if (patientIdentifier == null) {
-			log.info("Patient ID " + xRayResult.getPatientId() + " not found.");
-			return false;
-		}
-		if (record[1] == null) {
-			record[1] = 1;
-		}
-		Integer patientId = Integer.parseInt(patientIdentifier.toString());
-		// Fetch Location ID from Deployment Short Name
-		Integer encounterLocationId = Integer.parseInt(record[1].toString());
 		DateTime dateCreated = new DateTime(xRayResult.getTestResultDate().getTime());
-		// If an observation is found with same Cartridge ID, then continue
-		StringBuilder filter = new StringBuilder();
-		filter.append("where concept_id = " + Constant.CAD4TB_CONCEPT);
-		filter.append(" and value_text = '" + xRayResult.getTestResultDate() + "'");
-		// Search for all GX Test forms with missing results
 		long rows = -1;
 		try {
-			rows = dbUtil.getTotalRows("openmrs.obs", filter.toString());
+			// If another XRay result is found with same order ID, then skip
+			StringBuilder query = new StringBuilder();
+			query.append("select count(*) from encounter as e ");
+			query.append(
+					"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
+							+ Constant.ORDER_ID_CONCEPT + " ");
+			query.append("where e.voided = 0 ");
+			query.append("and e.encounter_type = " + Constant.XRAY_RESULT_ENCOUNTER_TYPE + " ");
+			query.append("and e.patient_id = " + patientId + " ");
+			query.append("and ord.value_text = '" + xRayResult.getOrderId() + "'");
+			Object obj = dbUtil.runCommandWithException(CommandType.SELECT, query.toString());
+			rows = Long.parseLong(obj.toString());
 		} catch (SQLException e1) {
 			// Do nothing
 		}
@@ -284,7 +291,7 @@ public class Cad4tbImportService {
 			log.warn("Record already exists against this Result: " + xRayResult.toString());
 			return false;
 		}
-		return saveXrayResult(patientId, encounterLocationId, cad4tbUserId, dateCreated, xRayResult);
+		return saveXrayResult(patientId, locationId, cad4tbUserId, dateCreated, xRayResult);
 	}
 
 	/**
@@ -301,13 +308,14 @@ public class Cad4tbImportService {
 			throws MalformedURLException, JSONException {
 		try {
 			StringBuilder params = new StringBuilder();
-			params.append("Archive=" + Constant.ARCHIVE_NAME);
+			params.append("Archive=" + archiveName);
 			params.append("&PatientID=" + patientId);
-			params.append("&Project=" + Constant.CAD4TB_API_PROJECT_NAME);
+			params.append("&Project=" + projectName);
 
 			// First fetch patient studies
 			String url = baseUrl + "patient/studies/list/?" + params.toString();
-			JSONArray studies = new JSONArray(HttpUtil.httpsGet(url, username, password));
+			String json = HttpUtil.httpsGet(url, username, password);
+			JSONArray studies = new JSONArray(json);
 			JSONObject study = studies.getJSONObject(0);
 
 			// Now fetch series for this study
@@ -376,27 +384,61 @@ public class Cad4tbImportService {
 			DateTime dateEncounterCreated, XRayResult xrayResult)
 			throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
 		List<String> queries = new ArrayList<String>();
-		Integer encounterId = saveXrayResultEncounter(patientId, encounterLocationId, cad4tbUserId,
-				dateEncounterCreated);
-		StringBuilder query;
+		// Save Encounter
+		StringBuilder query = new StringBuilder(
+				"INSERT INTO encounter (encounter_id, encounter_type, patient_id, location_id, encounter_datetime, creator, date_created, uuid) VALUES ");
+		query.append("(0," + Constant.XRAY_RESULT_ENCOUNTER_TYPE);
+		query.append("," + patientId);
+		query.append("," + encounterLocationId);
+		query.append(",'" + DateTimeUtil.toSqlDateString(dateEncounterCreated.toDate()));
+		query.append("'," + cad4tbUserId);
+		query.append(",current_timestamp()");
+		query.append(",'" + UUID.randomUUID().toString() + "')");
+		Integer encounterId = -1;
+		// Yes. I know this makes little sense, but if you have any better
+		// ideas to fetch encounter ID of the record just inserted, then be
+		// my guest. And please try executeUpdate Statement yourself before
+		// making "that" suggestion
+
+		// No execution in test mode
+		if (!Cad4tbMain.DEBUG_MODE) {
+			Connection con = dbUtil.getConnection();
+			PreparedStatement ps = con.prepareStatement(query.toString());
+			ps.executeUpdate(query.toString(), Statement.RETURN_GENERATED_KEYS);
+			ResultSet rs = ps.getGeneratedKeys();
+			if (rs.next()) {
+				encounterId = rs.getInt(1);
+			}
+			rs.close();
+			ps.close();
+		}
+
 		Date obsDate = new Date();
 		try {
 			obsDate = xrayResult.getTestResultDate();
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
-		String insertQueryPrefix = "INSERT INTO openmrs.obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_coded,value_datetime,value_numeric,value_text,comments,creator,date_created,voided,uuid) VALUES ";
 
+		// Query for XRay order ID
 		if (xrayResult.getOrderId() != null) {
-			query = getOrderIdQuery(patientId, encounterLocationId, cad4tbUserId, xrayResult, encounterId, obsDate,
-					insertQueryPrefix);
+			query = getOrderIdQuery(patientId, encounterLocationId, cad4tbUserId, xrayResult, encounterId, obsDate);
 			queries.add(query.toString());
 		}
 
 		// Query for XRay result observation
-		query = getXRayResultQuery(patientId, encounterLocationId, cad4tbUserId, encounterId, obsDate,
-				insertQueryPrefix, xrayResult.getCad4tbScore());
+		query = getXRayResultQuery(patientId, encounterLocationId, cad4tbUserId, encounterId, obsDate, xrayResult);
 		queries.add(query.toString());
+
+		// Query for score range
+		query = getXRayScoreRangeQuery(patientId, encounterLocationId, cad4tbUserId, encounterId, obsDate, xrayResult);
+		queries.add(query.toString());
+
+		// Query for presumptive decision
+		query = getXRayPresumptiveTbQuery(patientId, encounterLocationId, cad4tbUserId, encounterId, obsDate,
+				xrayResult);
+		queries.add(query.toString());
+
 		for (String q : queries) {
 			try {
 				if (Cad4tbMain.DEBUG_MODE) {
@@ -416,75 +458,55 @@ public class Cad4tbImportService {
 		return true;
 	}
 
-	/**
-	 * This method saves the Encounter part of GeneXpertResult
-	 * 
-	 * @param patientId
-	 * @param encounterLocationId
-	 * @param cad4tbUserId
-	 * @param dateEncounterCreated
-	 * @return
-	 * @throws SQLException
-	 * @throws InstantiationException
-	 * @throws IllegalAccessException
-	 * @throws ClassNotFoundException
-	 */
-	public Integer saveXrayResultEncounter(int patientId, int encounterLocationId, int cad4tbUserId,
-			DateTime dateEncounterCreated)
-			throws SQLException, InstantiationException, IllegalAccessException, ClassNotFoundException {
-		StringBuilder query = new StringBuilder(
-				"INSERT INTO openmrs.encounter (encounter_id, encounter_type, patient_id, location_id, encounter_datetime, creator, date_created, uuid) VALUES ");
-		query.append("(0," + Constant.XRAY_ENCOUNTER_TYPE);
-		query.append("," + patientId);
-		query.append("," + encounterLocationId);
-		query.append(",'" + DateTimeUtil.toSqlDateString(dateEncounterCreated.toDate()));
-		query.append("'," + cad4tbUserId);
-		query.append(",current_timestamp()");
-		query.append(",'" + UUID.randomUUID().toString() + "')");
-		Integer encounterId = -1;
-		// Yes. I know this makes little sense, but if you have any better
-		// ideas to fetch encounter ID of the record just inserted, then be
-		// my guest. And please try executeUpdate Statement yourself before
-		// making "that" suggestion
-		Connection con = dbUtil.getConnection();
-		PreparedStatement ps = con.prepareStatement(query.toString());
-		ps.executeUpdate(query.toString(), Statement.RETURN_GENERATED_KEYS);
-		ResultSet rs = ps.getGeneratedKeys();
-		if (rs.next()) {
-			encounterId = rs.getInt(1);
-		}
-		rs.close();
-		ps.close();
-		return encounterId;
-	}
-
 	public StringBuilder getOrderIdQuery(int patientId, int encounterLocationId, int cad4tbUserId, XRayResult xray,
-			Integer encounterId, Date obsDate, String queryPrefix) {
+			Integer encounterId, Date obsDate) {
+		String queryPrefix = "INSERT INTO obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_text,comments,creator,date_created,voided,uuid) VALUES ";
 		StringBuilder query = new StringBuilder(queryPrefix);
-		query.append("(0," + patientId + "," + Constant.ERROR_CODE_CONCEPT + "," + encounterId + ",");
-		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,NULL,NULL,");
-		query.append(xray.getOrderId() + ",NULL,'Auto-saved by CAD4TB Integration Service.',");
+		query.append("(0," + patientId + "," + Constant.ORDER_ID_CONCEPT + "," + encounterId + ",");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
+		query.append("'" + xray.getOrderId() + "','Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append(
-				"'" + DateTimeUtil.toSqlDateTimeString(new Date()) + "',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
+		query.append("',0,'" + UUID.randomUUID().toString() + "')");
 		return query;
 	}
 
 	public StringBuilder getXRayResultQuery(int patientId, int encounterLocationId, int cad4tbUserId,
-			Integer encounterId, Date obsDate, String insertQueryPrefix, Double cad4tbResult) {
-		boolean error = cad4tbResult <= 0D;
-		StringBuilder query = new StringBuilder(insertQueryPrefix);
+			Integer encounterId, Date obsDate, XRayResult xray) {
+		String queryPrefix = "INSERT INTO obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_numeric,comments,creator,date_created,voided,uuid) VALUES ";
+		StringBuilder query = new StringBuilder(queryPrefix);
 		query.append("(0," + patientId + "," + Constant.XRAY_RESULT_CONCEPT + "," + encounterId + ",");
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
-		if (error) {
-			query.append(Constant.ERROR_CONCEPT + ",");
-		} else {
-			query.append(Constant.ERROR_CODE_CONCEPT + ",");
-		}
-		query.append("NULL,NULL,NULL,'Auto-saved by CAD4TB Integration Service.',");
+		query.append(xray.getCad4tbScore() + ",'Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append(
-				"'" + DateTimeUtil.toSqlDateTimeString(new Date()) + "',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
+		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		return query;
+	}
+
+	public StringBuilder getXRayScoreRangeQuery(int patientId, int encounterLocationId, int cad4tbUserId,
+			Integer encounterId, Date obsDate, XRayResult xray) {
+		String queryPrefix = "INSERT INTO obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_coded,comments,creator,date_created,voided,uuid) VALUES ";
+		StringBuilder query = new StringBuilder(queryPrefix);
+		query.append("(0," + patientId + "," + Constant.CAD4TB_SCORE_RANGE_CONCEPT + "," + encounterId + ",");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
+		query.append(xray.getCad4tbScoreRange() + ",'Auto-saved by CAD4TB Integration Service.',");
+		query.append(cad4tbUserId + ",");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
+		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		return query;
+	}
+
+	public StringBuilder getXRayPresumptiveTbQuery(int patientId, int encounterLocationId, int cad4tbUserId,
+			Integer encounterId, Date obsDate, XRayResult xray) {
+		String queryPrefix = "INSERT INTO obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_coded,comments,creator,date_created,voided,uuid) VALUES ";
+		StringBuilder query = new StringBuilder(queryPrefix);
+		query.append("(0," + patientId + "," + Constant.PRESUMPTIVE_TB_CXR_CONCEPT + "," + encounterId + ",");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
+		query.append(xray.getPresumptiveTbCase() + ",'Auto-saved by CAD4TB Integration Service.',");
+		query.append(cad4tbUserId + ",");
+		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
+		query.append("',0,'" + UUID.randomUUID().toString() + "')");
 		return query;
 	}
 }
