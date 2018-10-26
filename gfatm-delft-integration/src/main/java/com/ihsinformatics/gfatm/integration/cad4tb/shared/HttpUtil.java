@@ -15,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -33,9 +34,11 @@ public class HttpUtil {
 	 * @param urlAddress
 	 * @return
 	 * @throws MalformedURLException
+	 * @throws UnsupportedEncodingException
 	 */
-	public static String httpsGet(String urlAddress, String username, String password) throws MalformedURLException {
-		URL url = new URL(urlAddress);
+	public static String httpsGet(String urlAddress, String params, String username, String password)
+			throws MalformedURLException, UnsupportedEncodingException {
+		URL url = new URL(urlAddress + params);
 		try {
 			HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
 			conn.setRequestMethod("GET");

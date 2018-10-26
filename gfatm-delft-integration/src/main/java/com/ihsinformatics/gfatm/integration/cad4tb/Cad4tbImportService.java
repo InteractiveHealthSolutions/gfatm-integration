@@ -221,7 +221,7 @@ public class Cad4tbImportService {
 			// Date dateCreated = DateTimeUtil.fromSqlDateTimeString(order[k++].toString());
 			String orderId = order[k++].toString();
 			if (Cad4tbMain.DEBUG_MODE) {
-				String[] testIds = { "0", "012345", "1078617" };
+				String[] testIds = { "0", "00", "000" };
 				int random = ThreadLocalRandom.current().nextInt(0, testIds.length + 1);
 				patientIdentifier = testIds[random];
 				encounterDatetime = DateTimeUtil.fromSqlDateTimeString("2017-09-23 00:00:00");
@@ -313,23 +313,23 @@ public class Cad4tbImportService {
 			params.append("&Project=" + projectName);
 
 			// First fetch patient studies
-			String url = baseUrl + "patient/studies/list/?" + params.toString();
-			String json = HttpUtil.httpsGet(url, username, password);
+			String url = baseUrl + "patient/studies/list/?";
+			String json = HttpUtil.httpsGet(url, params.toString(), username, password);
 			JSONArray studies = new JSONArray(json);
 			JSONObject study = studies.getJSONObject(0);
 
 			// Now fetch series for this study
 			params.append("&StudyInstanceUID=" + study.getString("StudyInstanceUID"));
-			url = baseUrl + "patient/study/series/list/?" + params.toString();
-			JSONArray serieses = new JSONArray(HttpUtil.httpsGet(url, username, password));
+			url = baseUrl + "patient/study/series/list/?";
+			JSONArray serieses = new JSONArray(HttpUtil.httpsGet(url, params.toString(), username, password));
 			JSONObject series = serieses.getJSONObject(0);
 
 			// Finally retrieve the results for this series
 			params.append("&SeriesInstanceUID=" + series.getString("SeriesInstanceUID"));
 			params.append("&Type=" + Constant.TEST_TYPE);
 			params.append("&Results=CAD4TB%205");
-			url = baseUrl + "/series/results/?" + params.toString();
-			JSONArray results = new JSONArray(HttpUtil.httpsGet(url, username, password));
+			url = baseUrl + "/series/results/?";
+			JSONArray results = new JSONArray(HttpUtil.httpsGet(url, params.toString(), username, password));
 			if (results.length() == 0) {
 				return null;
 			}
@@ -401,7 +401,8 @@ public class Cad4tbImportService {
 		// making "that" suggestion
 
 		// No execution in test mode
-		if (!Cad4tbMain.DEBUG_MODE) {
+		// if (!Cad4tbMain.DEBUG_MODE)
+		{
 			Connection con = dbUtil.getConnection();
 			PreparedStatement ps = con.prepareStatement(query.toString());
 			ps.executeUpdate(query.toString(), Statement.RETURN_GENERATED_KEYS);
@@ -441,10 +442,10 @@ public class Cad4tbImportService {
 
 		for (String q : queries) {
 			try {
-				if (Cad4tbMain.DEBUG_MODE) {
-					log.info("Skipping query due to test mode." + q);
-					return true;
-				}
+//				if (Cad4tbMain.DEBUG_MODE) {
+//					log.info("Skipping query due to test mode." + q);
+//					return true;
+//				}
 				dbUtil.runCommandWithException(CommandType.INSERT, q);
 			} catch (Exception e) {
 				StringBuilder message = new StringBuilder();
