@@ -22,7 +22,6 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.log4j.Logger;
-import org.joda.time.DateTime;
 
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayOrder;
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayResult;
@@ -31,10 +30,10 @@ import com.ihsinformatics.util.CommandType;
 import com.ihsinformatics.util.DatabaseUtil;
 import com.ihsinformatics.util.DateTimeUtil;
 
-public class Cad4TbFileUploadServlet extends HttpServlet {
+public class Cad4tbServlet extends HttpServlet {
 	public static final boolean DEBUG_MODE = ManagementFactory.getRuntimeMXBean().getInputArguments().toString()
 			.indexOf("-agentlib:jdwp") > 0;
-	private static final Logger log = Logger.getLogger(Cad4TbFileUploadServlet.class);
+	private static final Logger log = Logger.getLogger(Cad4tbServlet.class);
 	private OpenmrsMetaService openmrs;
 
 	private int cad4tbUserId;
@@ -48,7 +47,7 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 	 * @throws IOException
 	 * @see HttpServlet#HttpServlet()
 	 */
-	public Cad4TbFileUploadServlet() throws IOException {
+	public Cad4tbServlet() throws IOException {
 		super();
 	}
 
@@ -86,9 +85,9 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 				"select user_id from users where username = '" + username + "'");
 		if (userId != null) {
 			cad4tbUserId = Integer.parseInt(userId.toString());
-			return;
+		} else {
+			cad4tbUserId = Integer.parseInt(properties.getProperty("cad4tb.openmrs.user_id"));
 		}
-		cad4tbUserId = Integer.parseInt(properties.getProperty("cad4tb.openmrs.user_id"));
 		openmrs = new OpenmrsMetaService(dbUtil);
 	}
 
@@ -109,11 +108,13 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
+		PrintWriter out = response.getWriter();
 		if (dbUtil == null) {
 			initialize(readProperties());
 		}
 		final String UPLOAD_DIRECTORY = "../";
 		String content = null;
+		String output = null;
 		if (ServletFileUpload.isMultipartContent(request)) {
 			try {
 				List<FileItem> fileItems = new ServletFileUpload(new DiskFileItemFactory()).parseRequest(request);
@@ -128,12 +129,11 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 						content = new String(item.get());
 					}
 				}
+				output = processUploadedResults(content);
+				out.print(output);
 			} catch (Exception e) {
-				e.printStackTrace();
+				out.print(e.getMessage());
 			}
-			PrintWriter out = response.getWriter();
-			String output = processUploadedResults(content);
-			out.print(output);
 		}
 	}
 
@@ -231,18 +231,29 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 		String dateStr = parts[headerIndices.get("StudyDate")];
 		String timeStr = parts[headerIndices.get("StudyTime")];
 		String cad4tb = parts[headerIndices.get("CAD4TB 5")];
-		DateTime studyDate = new DateTime(DateTimeUtil.fromSqlDateString(dateStr).getTime());
-		// TODO: Must double check
-		studyDate.plus(Long.parseLong(timeStr));
+		String dateTimeStr = dateStr + timeStr;
+		Date studyDate = DateTimeUtil.fromString(dateTimeStr, DateTimeUtil.SQL_DATE + "HHmmss");
 		XRayOrder xrayOrder = null;
 		StringBuilder result = new StringBuilder();
 		try {
+			// Skip invalid PatientIDs
+			if (!patientId.matches(Constant.PATIENT_ID_REGEX)) {
+				return "Patient ID " + patientId + " is either missing or does not match the required pattern\r\n";
+			}
 			List<XRayOrder> orders = openmrs.getXRayOrders(patientId, studyDate);
+			// Check if any order exists
+			if (orders.isEmpty()) {
+				result.append("No order was found for PatientID: ");
+				result.append(patientId + " ");
+				result.append("in date " + DateTimeUtil.toSqlDateString(studyDate));
+				result.append("\r\n");
+				return result.toString();
+			}
 			// Get closest OrderReturn the latest X-ray in the group
 			for (XRayOrder xRayResult : orders) {
-				if (result == null) {
+				if (xrayOrder == null) {
 					xrayOrder = xRayResult;
-				} else if (xrayOrder.getEncounterDatetime().before(studyDate.toDate())) {
+				} else if (xrayOrder.getEncounterDatetime().before(studyDate)) {
 					xrayOrder = xRayResult;
 				}
 			}
@@ -256,6 +267,7 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 				xrayResult.setCad4tbScoreRange(Constant.ABNORMAL_SCORE_RANGE_CONCEPT);
 				xrayResult.setPresumptiveTbCase(Constant.YES_CONCEPT);
 			}
+			xrayResult.setTestResultDate(studyDate);
 			openmrs.saveXrayResult(xrayOrder.getPid(), xrayOrder.getLocationId(), cad4tbUserId,
 					xrayOrder.getDateCreated(), xrayResult);
 		} catch (Exception e) {

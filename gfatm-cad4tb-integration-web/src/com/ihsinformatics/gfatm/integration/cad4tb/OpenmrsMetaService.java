@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.UUID;
 
 import org.apache.log4j.Logger;
-import org.joda.time.DateTime;
 
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayOrder;
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayResult;
@@ -52,7 +51,7 @@ public class OpenmrsMetaService {
 	 * @param end
 	 * @return
 	 */
-	public List<XRayOrder> getXRayOrders(DateTime start, DateTime end) {
+	public List<XRayOrder> getXRayOrders(Date start, Date end) {
 		// Fetch Encounters between start and end
 		StringBuilder query = new StringBuilder();
 		query.append(
@@ -63,8 +62,8 @@ public class OpenmrsMetaService {
 		query.append(
 				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
 		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
-		query.append("and e.date_created between '" + DateTimeUtil.toSqlDateTimeString(start.toDate()) + "' and '"
-				+ DateTimeUtil.toSqlDateTimeString(end.toDate()) + "'");
+		query.append("and e.date_created between '" + DateTimeUtil.toSqlDateTimeString(start) + "' and '"
+				+ DateTimeUtil.toSqlDateTimeString(end) + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
 		List<XRayOrder> orders = new ArrayList<XRayOrder>();
 		for (Object[] row : xrayOrders) {
@@ -80,8 +79,40 @@ public class OpenmrsMetaService {
 		return orders;
 	}
 
-	public List<XRayOrder> getXRayOrders(String patientId, DateTime orderDate) {
-		return null;
+	/**
+	 * Returns XRay orders as list of Object arrays from Encounters in given order date
+	 * 
+	 * @param start
+	 * @param end
+	 * @return
+	 */
+	public List<XRayOrder> getXRayOrders(String patientId, Date orderDate) {
+		// Fetch Encounters between start and end
+		StringBuilder query = new StringBuilder();
+		query.append(
+				"select distinct e.patient_id, pid.identifier, e.location_id, e.encounter_datetime, e.date_created, ord.value_text as order_id from encounter as e ");
+		query.append(
+				"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
+						+ Constant.ORDER_ID_CONCEPT + " ");
+		query.append(
+				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
+		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
+		query.append("and e.encounter_datetime <= '" + DateTimeUtil.toSqlDateTimeString(orderDate) + "' ");
+		query.append("and pid.identifier = '" + patientId + "'");
+		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
+		List<XRayOrder> orders = new ArrayList<XRayOrder>();
+		for (Object[] row : xrayOrders) {
+			int k = 0;
+			XRayOrder order = new XRayOrder();
+			order.setPid(Integer.parseInt(row[k++].toString()));
+			order.setPatientIdentifier(row[k++].toString());
+			order.setLocationId(Integer.valueOf(row[k++].toString()));
+			order.setEncounterDatetime(DateTimeUtil.fromSqlDateString(row[k++].toString()));
+			order.setDateCreated(DateTimeUtil.fromSqlDateTimeString(row[k++].toString()));
+			order.setOrderId(row[k++].toString());
+			orders.add(order);
+		}
+		return orders;
 	}
 
 	/**

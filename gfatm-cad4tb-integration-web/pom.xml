@@ -4,7 +4,7 @@
 
 	<groupId>com.ihsinformatics.gfatm</groupId>
 	<artifactId>gfatm-cad4tb-integration-web</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>1.0.0</version>
 	<name>gfatm-cad4tb-integration-web</name>
 	<packaging>war</packaging>
 	<description>Web service for GFATM to upload CAD4TB Results</description>
