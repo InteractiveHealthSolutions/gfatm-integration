@@ -54,7 +54,8 @@ public class Cad4tbImportServiceTest {
 		properties.put("cad4tb.openmrs.password", "Jingle94");
 		properties.put("cad4tb.fetch_duration_hours", "1200");
 		properties.put("cad4tb.fetch_delay", "10");
-		service = new Cad4tbImportService(properties);
+		service = new Cad4tbImportService();
+		service.initialize(properties);
 	}
 
 	/**
@@ -92,13 +93,13 @@ public class Cad4tbImportServiceTest {
 
 	/**
 	 * Test method for
-	 * {@link com.ihsinformatics.gfatm.integration.cad4tb.Cad4tbImportService#getXrayResultByOrder(java.lang.String, java.util.Date)}.
+	 * {@link com.ihsinformatics.gfatm.integration.cad4tb.Cad4tbImportService#getXrayResultFromApi(java.lang.String, java.util.Date)}.
 	 */
 	@Test
 	public void testGetXrayResultsByOrder() {
 		try {
 			DateTime orderDate = new DateTime(2017, 11, 10, 0, 0);
-			XRayResult result = service.getXrayResultByOrder("012345", orderDate.toDate());
+			XRayResult result = service.getXrayResultFromApi("012345", orderDate.toDate());
 			assertNotNull(result);
 		} catch (Exception e) {
 			fail(e.getMessage());

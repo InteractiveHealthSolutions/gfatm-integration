@@ -20,16 +20,13 @@ import org.json.JSONObject;
 import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
 import com.ihsinformatics.util.DateTimeUtil;
 
-import lombok.Data;
-
 /**
  * @author owais.hussain@ihsinformatics.com
  *
  */
-public @Data class XRayResult implements Serializable {
+public class XRayResult implements Serializable {
 
 	private static final long serialVersionUID = -2396853698753897234L;
-	private static final String DATE_FORMAT = DateTimeUtil.ISO8601;
 	private String patientId;
 	private String studyId;
 	private String seriesId;
@@ -46,6 +43,230 @@ public @Data class XRayResult implements Serializable {
 	private String chestXRay;
 	private Integer presumptiveTbCase;
 	private Date returnVisitDate;
+
+	/**
+	 * @return the patientId
+	 */
+	public String getPatientId() {
+		return patientId;
+	}
+
+	/**
+	 * @param patientId the patientId to set
+	 */
+	public void setPatientId(String patientId) {
+		this.patientId = patientId;
+	}
+
+	/**
+	 * @return the studyId
+	 */
+	public String getStudyId() {
+		return studyId;
+	}
+
+	/**
+	 * @param studyId the studyId to set
+	 */
+	public void setStudyId(String studyId) {
+		this.studyId = studyId;
+	}
+
+	/**
+	 * @return the seriesId
+	 */
+	public String getSeriesId() {
+		return seriesId;
+	}
+
+	/**
+	 * @param seriesId the seriesId to set
+	 */
+	public void setSeriesId(String seriesId) {
+		this.seriesId = seriesId;
+	}
+
+	/**
+	 * @return the cad4tbScore
+	 */
+	public Double getCad4tbScore() {
+		return cad4tbScore;
+	}
+
+	/**
+	 * @param cad4tbScore the cad4tbScore to set
+	 */
+	public void setCad4tbScore(Double cad4tbScore) {
+		this.cad4tbScore = cad4tbScore;
+	}
+
+	/**
+	 * @return the testId
+	 */
+	public String getTestId() {
+		return testId;
+	}
+
+	/**
+	 * @param testId the testId to set
+	 */
+	public void setTestId(String testId) {
+		this.testId = testId;
+	}
+
+	/**
+	 * @return the testResultDate
+	 */
+	public Date getTestResultDate() {
+		return testResultDate;
+	}
+
+	/**
+	 * @param testResultDate the testResultDate to set
+	 */
+	public void setTestResultDate(Date testResultDate) {
+		this.testResultDate = testResultDate;
+	}
+
+	/**
+	 * @return the orderId
+	 */
+	public String getOrderId() {
+		return orderId;
+	}
+
+	/**
+	 * @param orderId the orderId to set
+	 */
+	public void setOrderId(String orderId) {
+		this.orderId = orderId;
+	}
+
+	/**
+	 * @return the diseaseExtent
+	 */
+	public String getDiseaseExtent() {
+		return diseaseExtent;
+	}
+
+	/**
+	 * @param diseaseExtent the diseaseExtent to set
+	 */
+	public void setDiseaseExtent(String diseaseExtent) {
+		this.diseaseExtent = diseaseExtent;
+	}
+
+	/**
+	 * @return the radiologicalDiagnosis
+	 */
+	public String getRadiologicalDiagnosis() {
+		return radiologicalDiagnosis;
+	}
+
+	/**
+	 * @param radiologicalDiagnosis the radiologicalDiagnosis to set
+	 */
+	public void setRadiologicalDiagnosis(String radiologicalDiagnosis) {
+		this.radiologicalDiagnosis = radiologicalDiagnosis;
+	}
+
+	/**
+	 * @return the abnormalDetailedDiagnosis
+	 */
+	public String getAbnormalDetailedDiagnosis() {
+		return abnormalDetailedDiagnosis;
+	}
+
+	/**
+	 * @param abnormalDetailedDiagnosis the abnormalDetailedDiagnosis to set
+	 */
+	public void setAbnormalDetailedDiagnosis(String abnormalDetailedDiagnosis) {
+		this.abnormalDetailedDiagnosis = abnormalDetailedDiagnosis;
+	}
+
+	/**
+	 * @return the otherAbnormalDiagnosis
+	 */
+	public String getOtherAbnormalDiagnosis() {
+		return otherAbnormalDiagnosis;
+	}
+
+	/**
+	 * @param otherAbnormalDiagnosis the otherAbnormalDiagnosis to set
+	 */
+	public void setOtherAbnormalDiagnosis(String otherAbnormalDiagnosis) {
+		this.otherAbnormalDiagnosis = otherAbnormalDiagnosis;
+	}
+
+	/**
+	 * @return the doctorNotes
+	 */
+	public String getDoctorNotes() {
+		return doctorNotes;
+	}
+
+	/**
+	 * @param doctorNotes the doctorNotes to set
+	 */
+	public void setDoctorNotes(String doctorNotes) {
+		this.doctorNotes = doctorNotes;
+	}
+
+	/**
+	 * @return the cad4tbScoreRange
+	 */
+	public Integer getCad4tbScoreRange() {
+		return cad4tbScoreRange;
+	}
+
+	/**
+	 * @param cad4tbScoreRange the cad4tbScoreRange to set
+	 */
+	public void setCad4tbScoreRange(Integer cad4tbScoreRange) {
+		this.cad4tbScoreRange = cad4tbScoreRange;
+	}
+
+	/**
+	 * @return the chestXRay
+	 */
+	public String getChestXRay() {
+		return chestXRay;
+	}
+
+	/**
+	 * @param chestXRay the chestXRay to set
+	 */
+	public void setChestXRay(String chestXRay) {
+		this.chestXRay = chestXRay;
+	}
+
+	/**
+	 * @return the presumptiveTbCase
+	 */
+	public Integer getPresumptiveTbCase() {
+		return presumptiveTbCase;
+	}
+
+	/**
+	 * @param presumptiveTbCase the presumptiveTbCase to set
+	 */
+	public void setPresumptiveTbCase(Integer presumptiveTbCase) {
+		this.presumptiveTbCase = presumptiveTbCase;
+	}
+
+	/**
+	 * @return the returnVisitDate
+	 */
+	public Date getReturnVisitDate() {
+		return returnVisitDate;
+	}
+
+	/**
+	 * @param returnVisitDate the returnVisitDate to set
+	 */
+	public void setReturnVisitDate(Date returnVisitDate) {
+		this.returnVisitDate = returnVisitDate;
+	}
 
 	/**
 	 * Convert JSON object into XRayResult object

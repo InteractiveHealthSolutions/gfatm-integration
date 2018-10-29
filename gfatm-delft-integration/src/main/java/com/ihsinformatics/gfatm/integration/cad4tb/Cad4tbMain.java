@@ -20,6 +20,7 @@ import java.util.Properties;
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
+import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
 import com.ihsinformatics.util.DateTimeUtil;
 
 /**
@@ -31,7 +32,6 @@ public class Cad4tbMain {
 	public static final boolean DEBUG_MODE = ManagementFactory.getRuntimeMXBean().getInputArguments().toString()
 			.indexOf("-agentlib:jdwp") > 0;
 	private static final Logger log = Logger.getLogger(Cad4tbMain.class);
-	private static final String PROP_FILE_NAME = "gfatm-cad4tb-integration.properties";
 
 	public static void main(String[] args) {
 		try {
@@ -67,7 +67,8 @@ public class Cad4tbMain {
 					}
 				}
 			}
-			Cad4tbImportService service = new Cad4tbImportService(readProperties());
+			Cad4tbImportService service = new Cad4tbImportService();
+			service.initialize(readProperties());
 			// Import all results
 			if (doImportAll) {
 				service.importAll();
@@ -90,7 +91,8 @@ public class Cad4tbMain {
 	 * @throws IOException
 	 */
 	public static Properties readProperties() throws IOException {
-		InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(PROP_FILE_NAME);
+		InputStream inputStream = Thread.currentThread().getContextClassLoader()
+				.getResourceAsStream(Constant.PROP_FILE_NAME);
 		Properties properties = new Properties();
 		properties.load(inputStream);
 		return properties;
