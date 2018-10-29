@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
@@ -183,11 +182,6 @@ public class Cad4tbImportService {
 	public void processOrders(List<XRayOrder> xrayOrders) throws MalformedURLException, InstantiationException,
 			IllegalAccessException, ClassNotFoundException, SQLException {
 		for (XRayOrder order : xrayOrders) {
-			int k = 0;
-			if (Cad4tbMain.DEBUG_MODE) {
-				String[] testIds = { "0", "00", "000" };
-				int random = ThreadLocalRandom.current().nextInt(0, testIds.length + 1);
-			}
 			XRayResult xRayResult = getXrayResultFromApi(order.getPatientIdentifier(), order.getEncounterDatetime());
 			if (xRayResult == null) {
 				continue;

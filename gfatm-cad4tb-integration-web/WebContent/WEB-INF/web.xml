@@ -11,7 +11,7 @@
 		<description></description>
 		<display-name>Cad4TbFileUploadServlet</display-name>
 		<servlet-name>cad4tb</servlet-name>
-		<servlet-class>com.ihsinformatics.gfatm.web.cad4tb.Cad4TbFileUploadServlet</servlet-class>
+		<servlet-class>com.ihsinformatics.gfatm.integration.cad4tb.Cad4TbFileUploadServlet</servlet-class>
 	</servlet>
 	<servlet-mapping>
 		<servlet-name>cad4tb</servlet-name>

@@ -1,12 +1,16 @@
-package com.ihsinformatics.gfatm.web.cad4tb;
+package com.ihsinformatics.gfatm.integration.cad4tb;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
+import java.lang.management.ManagementFactory;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ThreadLocalRandom;
 
 import javax.servlet.ServletException;
@@ -17,18 +21,75 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
+import org.apache.log4j.Logger;
+import org.joda.time.DateTime;
 
+import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayOrder;
+import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayResult;
+import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
+import com.ihsinformatics.util.CommandType;
+import com.ihsinformatics.util.DatabaseUtil;
 import com.ihsinformatics.util.DateTimeUtil;
 
 public class Cad4TbFileUploadServlet extends HttpServlet {
+	public static final boolean DEBUG_MODE = ManagementFactory.getRuntimeMXBean().getInputArguments().toString()
+			.indexOf("-agentlib:jdwp") > 0;
+	private static final Logger log = Logger.getLogger(Cad4TbFileUploadServlet.class);
+	private OpenmrsMetaService openmrs;
+
+	private int cad4tbUserId;
+	private String username = null;
+	private DatabaseUtil dbUtil;
+
 	private static final long serialVersionUID = 1L;
 	private Map<String, Integer> headerIndices;
 
 	/**
+	 * @throws IOException
 	 * @see HttpServlet#HttpServlet()
 	 */
-	public Cad4TbFileUploadServlet() {
+	public Cad4TbFileUploadServlet() throws IOException {
 		super();
+	}
+
+	/**
+	 * Read properties from file
+	 * 
+	 * @throws IOException
+	 */
+	public static Properties readProperties() throws IOException {
+		InputStream inputStream = Thread.currentThread().getContextClassLoader()
+				.getResourceAsStream(Constant.PROP_FILE_NAME);
+		Properties properties = new Properties();
+		properties.load(inputStream);
+		return properties;
+	}
+
+	/**
+	 * Initialize properties, database, and other stuff
+	 */
+	public void initialize(Properties properties) {
+		// Initiate properties
+		username = properties.getProperty("cad4tb.openmrs.username");
+		String dbUsername = properties.getProperty("connection.username");
+		String dbPassword = properties.getProperty("connection.password");
+		String url = properties.getProperty("connection.url");
+		String dbName = properties.getProperty("connection.default_schema");
+		String driverName = properties.getProperty("connection.driver_class");
+		dbUtil = new DatabaseUtil(url, dbName, driverName, dbUsername, dbPassword);
+		if (!dbUtil.tryConnection()) {
+			log.fatal("Unable to connect with database using " + dbUtil.toString());
+			System.exit(0);
+		}
+		// Get CAD4TB user from properties and set mapping ID by searching in OpenMRS
+		Object userId = dbUtil.runCommand(CommandType.SELECT,
+				"select user_id from users where username = '" + username + "'");
+		if (userId != null) {
+			cad4tbUserId = Integer.parseInt(userId.toString());
+			return;
+		}
+		cad4tbUserId = Integer.parseInt(properties.getProperty("cad4tb.openmrs.user_id"));
+		openmrs = new OpenmrsMetaService(dbUtil);
 	}
 
 	/**
@@ -48,7 +109,10 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
-		final String UPLOAD_DIRECTORY = "C:/workspace";
+		if (dbUtil == null) {
+			initialize(readProperties());
+		}
+		final String UPLOAD_DIRECTORY = "../";
 		String content = null;
 		if (ServletFileUpload.isMultipartContent(request)) {
 			try {
@@ -68,12 +132,12 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 				e.printStackTrace();
 			}
 			PrintWriter out = response.getWriter();
-			String output = processOutput(content);
+			String output = processUploadedResults(content);
 			out.print(output);
 		}
 	}
 
-	public String processOutput(String content) {
+	public String processUploadedResults(String content) {
 		StringBuilder output = new StringBuilder();
 		if (content == null) {
 			output.append("ERROR! Data could not be read from the file.");
@@ -156,14 +220,47 @@ public class Cad4TbFileUploadServlet extends HttpServlet {
 	 * @param headerIndices
 	 * @param row
 	 * @return
+	 * @throws SQLException
+	 * @throws ClassNotFoundException
+	 * @throws IllegalAccessException
+	 * @throws InstantiationException
 	 */
 	public String processRow(Map<String, Integer> headerIndices, String row) {
 		String[] parts = row.split(",");
 		String patientId = parts[headerIndices.get("PatientID")];
-		String date = parts[headerIndices.get("StudyDate")];
-		String time = parts[headerIndices.get("StudyTime")];
+		String dateStr = parts[headerIndices.get("StudyDate")];
+		String timeStr = parts[headerIndices.get("StudyTime")];
 		String cad4tb = parts[headerIndices.get("CAD4TB 5")];
-		return patientId + ", " + date + ", " + time + ", " + cad4tb;
+		DateTime studyDate = new DateTime(DateTimeUtil.fromSqlDateString(dateStr).getTime());
+		// TODO: Must double check
+		studyDate.plus(Long.parseLong(timeStr));
+		XRayOrder xrayOrder = null;
+		StringBuilder result = new StringBuilder();
+		try {
+			List<XRayOrder> orders = openmrs.getXRayOrders(patientId, studyDate);
+			// Get closest OrderReturn the latest X-ray in the group
+			for (XRayOrder xRayResult : orders) {
+				if (result == null) {
+					xrayOrder = xRayResult;
+				} else if (xrayOrder.getEncounterDatetime().before(studyDate.toDate())) {
+					xrayOrder = xRayResult;
+				}
+			}
+			XRayResult xrayResult = new XRayResult();
+			xrayResult.setOrderId(xrayOrder.getOrderId());
+			xrayResult.setCad4tbScore(Double.valueOf(cad4tb));
+			if (xrayResult.getCad4tbScore() < Constant.NORMAL_CUTOFF_SCORE) {
+				xrayResult.setCad4tbScoreRange(Constant.NORMAL_SCORE_RANGE_CONCEPT);
+				xrayResult.setPresumptiveTbCase(Constant.NO_CONCEPT);
+			} else {
+				xrayResult.setCad4tbScoreRange(Constant.ABNORMAL_SCORE_RANGE_CONCEPT);
+				xrayResult.setPresumptiveTbCase(Constant.YES_CONCEPT);
+			}
+			openmrs.saveXrayResult(xrayOrder.getPid(), xrayOrder.getLocationId(), cad4tbUserId,
+					xrayOrder.getDateCreated(), xrayResult);
+		} catch (Exception e) {
+			log.error(e.getMessage());
+		}
+		return result.toString();
 	}
-
 }
