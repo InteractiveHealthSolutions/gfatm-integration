@@ -42,6 +42,7 @@ public class Cad4tbServlet extends HttpServlet {
 
 	private static final long serialVersionUID = 1L;
 	private Map<String, Integer> headerIndices;
+	private PrintWriter out;
 
 	/**
 	 * @throws IOException
@@ -108,56 +109,64 @@ public class Cad4tbServlet extends HttpServlet {
 	@Override
 	protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
-		PrintWriter out = response.getWriter();
+		out = response.getWriter();
 		if (dbUtil == null) {
 			initialize(readProperties());
 		}
 		final String UPLOAD_DIRECTORY = "../";
 		String content = null;
-		String output = null;
 		if (ServletFileUpload.isMultipartContent(request)) {
 			try {
 				List<FileItem> fileItems = new ServletFileUpload(new DiskFileItemFactory()).parseRequest(request);
+				String username = "";
+				String password = "";
+				// Read credentials
+				for (FileItem item : fileItems) {
+					if (item.getFieldName().equalsIgnoreCase("username")) {
+						username = new String(item.getString());
+					} else if (item.getFieldName().equalsIgnoreCase("password")) {
+						password = new String(item.getString());
+					}
+				}
+				if (!openmrs.authenticate(username, password)) {
+					out.print("AUTH_ERROR");
+					return;
+				}
 				for (FileItem item : fileItems) {
 					if (!item.isFormField()) {
 						File fileSaveDir = new File(UPLOAD_DIRECTORY);
 						if (!fileSaveDir.exists()) {
 							fileSaveDir.mkdir();
 						}
-						// String name = new File(item.getName()).getName();
-						// item.write(new File(UPLOAD_DIRECTORY + File.separator + name));
 						content = new String(item.get());
 					}
 				}
-				output = processUploadedResults(content);
-				out.print(output);
+				processUploadedResults(content);
 			} catch (Exception e) {
 				out.print(e.getMessage());
 			}
 		}
 	}
 
-	public String processUploadedResults(String content) {
-		StringBuilder output = new StringBuilder();
+	public void processUploadedResults(String content) {
 		if (content == null) {
-			output.append("ERROR! Data could not be read from the file.");
+			out.print("ERROR! Data could not be read from the file.");
 		}
 		String[] rows = content.split("\r\n");
 		// Read and match the header
 		String header = rows[0];
 		if (!checkHeader(header.toLowerCase())) {
-			output.append("ERROR! File header is missing one or more mandatory columns.");
-			return output.toString();
+			out.print("ERROR! File header is missing one or more mandatory columns.");
 		}
 		headerIndices = detectIndices(header);
 		if (!checkDateRange(rows)) {
-			output.append("ERROR! Multiple dates detected! Data can only be processed for a single date per file.");
-			return output.toString();
+			out.print("ERROR! Multiple dates detected! Data can only be processed for a single date per file.");
 		}
 		for (int i = 1; i < rows.length; i++) {
-			output.append(processRow(headerIndices, rows[i]));
+			String result = processRow(headerIndices, rows[i]);
+			log.info(result);
+			out.print(result);
 		}
-		return output.toString();
 	}
 
 	/**
@@ -226,16 +235,16 @@ public class Cad4tbServlet extends HttpServlet {
 	 * @throws InstantiationException
 	 */
 	public String processRow(Map<String, Integer> headerIndices, String row) {
-		String[] parts = row.split(",");
-		String patientId = parts[headerIndices.get("PatientID")];
-		String dateStr = parts[headerIndices.get("StudyDate")];
-		String timeStr = parts[headerIndices.get("StudyTime")];
-		String cad4tb = parts[headerIndices.get("CAD4TB 5")];
-		String dateTimeStr = dateStr + timeStr;
-		Date studyDate = DateTimeUtil.fromString(dateTimeStr, DateTimeUtil.SQL_DATE + "HHmmss");
-		XRayOrder xrayOrder = null;
 		StringBuilder result = new StringBuilder();
 		try {
+			String[] parts = row.split(",");
+			String patientId = parts[headerIndices.get("PatientID")];
+			String dateStr = parts[headerIndices.get("StudyDate")];
+			String timeStr = parts[headerIndices.get("StudyTime")];
+			String cad4tb = parts[headerIndices.get("CAD4TB 5")];
+			String dateTimeStr = dateStr + timeStr;
+			Date studyDate = DateTimeUtil.fromString(dateTimeStr, DateTimeUtil.SQL_DATE + "HHmmss");
+			XRayOrder xrayOrder = null;
 			// Skip invalid PatientIDs
 			if (!patientId.matches(Constant.PATIENT_ID_REGEX)) {
 				return "Patient ID " + patientId + " is either missing or does not match the required pattern\r\n";
@@ -245,9 +254,8 @@ public class Cad4tbServlet extends HttpServlet {
 			if (orders.isEmpty()) {
 				result.append("No order was found for PatientID: ");
 				result.append(patientId + " ");
-				result.append("in date " + DateTimeUtil.toSqlDateString(studyDate));
-				result.append("\r\n");
-				return result.toString();
+				result.append("(" + DateTimeUtil.toSqlDateString(studyDate) + ")");
+				return result.append("\r\n").toString();
 			}
 			// Get closest OrderReturn the latest X-ray in the group
 			for (XRayOrder xRayResult : orders) {
@@ -268,11 +276,20 @@ public class Cad4tbServlet extends HttpServlet {
 				xrayResult.setPresumptiveTbCase(Constant.YES_CONCEPT);
 			}
 			xrayResult.setTestResultDate(studyDate);
-			openmrs.saveXrayResult(xrayOrder.getPid(), xrayOrder.getLocationId(), cad4tbUserId,
-					xrayOrder.getDateCreated(), xrayResult);
+			if (openmrs.xrayResultExists(xrayOrder.getPatientGeneratedId(), xrayOrder.getOrderId())) {
+				result.append("INFO! Result already exists for " + xrayOrder.getPatientIdentifier());
+				result.append(" againts Order ID " + xrayOrder.getOrderId());
+				return result.append("\r\n").toString();
+			}
+			boolean saved = openmrs.saveXrayResult(xrayOrder.getPatientGeneratedId(), xrayOrder.getLocationId(),
+					cad4tbUserId, xrayOrder.getDateCreated(), xrayResult);
+			if (saved) {
+				result.append("SUCCESS! Result saved for " + xrayOrder.getPatientIdentifier());
+			} else {
+				result.append("WARNING! Result could not be saved for " + xrayOrder.getPatientIdentifier());
+			}
 		} catch (Exception e) {
-			log.error(e.getMessage());
 		}
-		return result.toString();
+		return result.append("\r\n").toString();
 	}
 }

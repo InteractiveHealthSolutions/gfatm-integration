@@ -118,7 +118,7 @@ public class Cad4tbImportService {
 			start = new DateTime(DateTimeUtil.fromSqlDateString(dateStr));
 		}
 		DateTime end = start.plusHours(fetchDurationHours);
-		processOrders(openmrs.getXRayOrders(start, end));
+		processOrders(openmrs.getXRayOrders(start.toDate(), end.toDate()));
 	}
 
 	/**
@@ -142,7 +142,7 @@ public class Cad4tbImportService {
 		DateTime start = new DateTime(DateTimeUtil.fromSqlDateString(dateStr));
 		DateTime end = start.plusDays(1);
 		while (end.isBeforeNow()) {
-			processOrders(openmrs.getXRayOrders(start, end));
+			processOrders(openmrs.getXRayOrders(start.toDate(), end.toDate()));
 			start = start.plusDays(1);
 			end = end.plusDays(1);
 		}
@@ -164,7 +164,7 @@ public class Cad4tbImportService {
 			IllegalAccessException, ClassNotFoundException, ParseException, SQLException {
 		start = start.withHourOfDay(0).withMinuteOfHour(0).withSecondOfMinute(0);
 		DateTime end = start.plusDays(1).minusSeconds(1);
-		processOrders(openmrs.getXRayOrders(start, end));
+		processOrders(openmrs.getXRayOrders(start.toDate(), end.toDate()));
 	}
 
 	/**

@@ -5,6 +5,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>CAD4TB Result Uploader</title>
+<link rel="shortcut icon" type="image/png" href="logo.png"/>
 <link rel="stylesheet"
 	href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
 <script
@@ -42,10 +43,16 @@
 		
 		inputFile();
 		
-		$("#uploadBtn").on("click", function() {
+		$("#uploadButton").on("click", function() {
+			// First, disable the submit button
+			$("#uploadButton").prop("disabled", true);
 			var url = "cad4tb";
 			var form = $("#sampleUploadFrm")[0];
 			var data = new FormData(form);
+			var user = document.getElementById("username").value;
+			var password = document.getElementById("password").value;
+			data.append("username", user);
+			data.append("password", password);
 			$.ajax({
 				type : "POST",
 				encType : "multipart/form-data",
@@ -55,10 +62,16 @@
 				contentType : false,
 				data : data,
 				success : function(msg) {
-					document.getElementById("logTextarea").value = msg;
+					if (msg == 'AUTH_ERROR') {
+						alert("ERROR! Please provide valid OpenMRS login (Program Manager/System Developer)");
+					} else {
+						document.getElementById("logTextarea").value = msg;
+					}
+					$("#uploadButton").prop("disabled", false);
 				},
 				error : function(msg) {
-					alert("Couldn't upload file");
+					alert("ERROR! Could not upload Results file.");
+					$("#uploadButton").prop("disabled", false);
 				}
 			});
 		});
@@ -73,10 +86,26 @@
 			<form id="sampleUploadFrm" method="POST" action="#"
 				enctype="multipart/form-data">
 				<!-- COMPONENT START -->
+				<table>
+					<tr>
+						<td>
+							<div class="form-group">
+								<label for="usr">OpenMRS Username:</label>
+								<input type="username" class="form-control" id="username" required="true">
+							</div>
+						</td>
+						<td>
+							<div class="form-group">
+								<label for="pwd">Password:</label>
+								<input type="password" class="form-control" id="password" required="true">
+							</div>
+						</td>
+					</tr>
+				</table>
 				<div class="form-group">
 					<div class="input-group input-file" name="file">
 						<span class="input-group-btn">
-							<button class="btn btn-default btn-choose" type="button">Choose</button>
+							<button class="btn btn-default btn-choose" type="button">Browse</button>
 						</span> <input type="text" class="form-control"
 							placeholder='Choose a file...' /> <span class="input-group-btn">
 							<button class="btn btn-warning btn-reset" type="button">Clear</button>
@@ -86,7 +115,7 @@
 				<!-- COMPONENT END -->
 				<div class="form-group">
 					<button type="button" class="btn btn-primary pull-right"
-						id="uploadBtn">Submit</button>
+						id="uploadButton">Submit</button>
 					<button type="reset" class="btn btn-danger">Reset</button>
 				</div>
 				<div class="form-group shadow-textarea">

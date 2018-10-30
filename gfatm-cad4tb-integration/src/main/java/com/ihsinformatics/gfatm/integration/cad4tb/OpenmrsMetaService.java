@@ -19,10 +19,8 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 
 import org.apache.log4j.Logger;
-import org.joda.time.DateTime;
 
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayOrder;
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayResult;
@@ -44,6 +42,31 @@ public class OpenmrsMetaService {
 		this.dbUtil = dbUtil;
 	}
 
+	@SuppressWarnings("deprecation")
+	public boolean authenticate(String username, String password) {
+		boolean result = false;
+		try {
+			if (username != null && password != null) {
+				if (username.equals("") || password.equals("")) {
+					return result;
+				}
+				String query = "select password, salt from openmrs.users inner join user_role using (user_id) where username = '"
+						+ username + "' and retired = 0 and role in ('System Developer', 'Program Manager')";
+				Object[][] data = dbUtil.getTableData(query);
+				if (data != null) {
+					String hash = data[0][0].toString();
+					String salt = data[0][1].toString();
+					if (com.ihsinformatics.util.SecurityUtil.hashMatches(hash, password + salt)) {
+						result = true;
+					}
+				}
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return result;
+	}
+
 	/**
 	 * Returns XRay orders as list of Object arrays from Encounters between given
 	 * stard and end date
@@ -52,7 +75,7 @@ public class OpenmrsMetaService {
 	 * @param end
 	 * @return
 	 */
-	public List<XRayOrder> getXRayOrders(DateTime start, DateTime end) {
+	public List<XRayOrder> getXRayOrders(Date start, Date end) {
 		// Fetch Encounters between start and end
 		StringBuilder query = new StringBuilder();
 		query.append(
@@ -63,8 +86,8 @@ public class OpenmrsMetaService {
 		query.append(
 				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
 		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
-		query.append("and e.date_created between '" + DateTimeUtil.toSqlDateTimeString(start.toDate()) + "' and '"
-				+ DateTimeUtil.toSqlDateTimeString(end.toDate()) + "'");
+		query.append("and e.date_created between '" + DateTimeUtil.toSqlDateTimeString(start) + "' and '"
+				+ DateTimeUtil.toSqlDateTimeString(end) + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
 		List<XRayOrder> orders = new ArrayList<XRayOrder>();
 		for (Object[] row : xrayOrders) {
@@ -80,8 +103,41 @@ public class OpenmrsMetaService {
 		return orders;
 	}
 
-	public List<XRayOrder> getXRayOrders(String patientId, DateTime orderDate) {
-		return null;
+	/**
+	 * Returns XRay orders as list of Object arrays from Encounters in given order
+	 * date
+	 * 
+	 * @param start
+	 * @param end
+	 * @return
+	 */
+	public List<XRayOrder> getXRayOrders(String patientIdentifier, Date orderDate) {
+		// Fetch Encounters between start and end
+		StringBuilder query = new StringBuilder();
+		query.append(
+				"select distinct e.patient_id, pid.identifier, e.location_id, e.encounter_datetime, e.date_created, ord.value_text as order_id from encounter as e ");
+		query.append(
+				"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
+						+ Constant.ORDER_ID_CONCEPT + " ");
+		query.append(
+				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
+		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
+		query.append("and datediff(e.encounter_datetime, '" + DateTimeUtil.toSqlDateTimeString(orderDate) + "') < 7 ");
+		query.append("and pid.identifier = '" + patientIdentifier + "'");
+		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
+		List<XRayOrder> orders = new ArrayList<XRayOrder>();
+		for (Object[] row : xrayOrders) {
+			int k = 0;
+			XRayOrder order = new XRayOrder();
+			order.setPatientGeneratedId(Integer.parseInt(row[k++].toString()));
+			order.setPatientIdentifier(row[k++].toString());
+			order.setLocationId(Integer.valueOf(row[k++].toString()));
+			order.setEncounterDatetime(DateTimeUtil.fromSqlDateString(row[k++].toString()));
+			order.setDateCreated(DateTimeUtil.fromSqlDateTimeString(row[k++].toString()));
+			order.setOrderId(row[k++].toString());
+			orders.add(order);
+		}
+		return orders;
 	}
 
 	/**
@@ -135,8 +191,7 @@ public class OpenmrsMetaService {
 		query.append("," + encounterLocationId);
 		query.append(",'" + DateTimeUtil.toSqlDateString(dateEncounterCreated));
 		query.append("'," + cad4tbUserId);
-		query.append(",current_timestamp()");
-		query.append(",'" + UUID.randomUUID().toString() + "')");
+		query.append(",current_timestamp(),uuid())");
 		Integer encounterId = -1;
 		// Yes. I know this makes little sense, but if you have any better
 		// ideas to fetch encounter ID of the record just inserted, then be
@@ -210,8 +265,7 @@ public class OpenmrsMetaService {
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
 		query.append("'" + xray.getOrderId() + "','Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
-		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("current_timestamp(),0,uuid())");
 		return query;
 	}
 
@@ -219,12 +273,11 @@ public class OpenmrsMetaService {
 			Integer encounterId, Date obsDate, XRayResult xray) {
 		String queryPrefix = "INSERT INTO obs (obs_id,person_id,concept_id,encounter_id,obs_datetime,location_id,interpretation,value_numeric,comments,creator,date_created,voided,uuid) VALUES ";
 		StringBuilder query = new StringBuilder(queryPrefix);
-		query.append("(0," + patientId + "," + Constant.XRAY_RESULT_CONCEPT + "," + encounterId + ",");
+		query.append("(0," + patientId + "," + Constant.CAD4TB_SCORE_CONCEPT + "," + encounterId + ",");
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
 		query.append(xray.getCad4tbScore() + ",'Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
-		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("current_timestamp(),0,uuid())");
 		return query;
 	}
 
@@ -236,8 +289,7 @@ public class OpenmrsMetaService {
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
 		query.append(xray.getCad4tbScoreRange() + ",'Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
-		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("current_timestamp(),0,uuid())");
 		return query;
 	}
 
@@ -249,8 +301,7 @@ public class OpenmrsMetaService {
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
 		query.append(xray.getPresumptiveTbCase() + ",'Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
-		query.append("'" + DateTimeUtil.toSqlDateTimeString(new Date()));
-		query.append("',0,'" + UUID.randomUUID().toString() + "')");
+		query.append("current_timestamp(),0,uuid())");
 		return query;
 	}
 }

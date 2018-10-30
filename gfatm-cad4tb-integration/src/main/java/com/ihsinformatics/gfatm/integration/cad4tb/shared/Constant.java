@@ -35,8 +35,8 @@ public final class Constant {
 	public static final int XRAY_RESULT_ENCOUNTER_TYPE = 186;
 
 	public static final int ORDER_ID_CONCEPT = 165715;
-	public static final int XRAY_RESULT_CONCEPT = 164373;
 	public static final int CAD4TB_CONCEPT = 164306;
+	public static final int CAD4TB_SCORE_CONCEPT = 164373;
 	public static final int CAD4TB_SCORE_RANGE_CONCEPT = 165802;
 	public static final int PRESUMPTIVE_TB_CXR_CONCEPT = 165835;
 

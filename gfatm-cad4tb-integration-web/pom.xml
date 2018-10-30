@@ -4,7 +4,7 @@
 
 	<groupId>com.ihsinformatics.gfatm</groupId>
 	<artifactId>gfatm-cad4tb-integration-web</artifactId>
-	<version>1.0.0</version>
+	<version>0.0.1-beta</version>
 	<name>gfatm-cad4tb-integration-web</name>
 	<packaging>war</packaging>
 	<description>Web service for GFATM to upload CAD4TB Results</description>
@@ -32,18 +32,19 @@
 		<sourceDirectory>src</sourceDirectory>
 		<plugins>
 			<plugin>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.7.0</version>
+				<configuration>
+					<source>1.8</source>
+					<target>1.8</target>
+				</configuration>
+			</plugin>
+			<plugin>
 				<artifactId>maven-war-plugin</artifactId>
 				<version>2.4</version>
 				<configuration>
 					<warSourceDirectory>WebContent</warSourceDirectory>
 					<failOnMissingWebXml>false</failOnMissingWebXml>
-				</configuration>
-			</plugin>
-			<plugin>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<configuration>
-					<source>1.7</source>
-					<target>1.7</target>
 				</configuration>
 			</plugin>
 		</plugins>
