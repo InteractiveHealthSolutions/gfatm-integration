@@ -26,6 +26,7 @@ import org.apache.log4j.Logger;
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayOrder;
 import com.ihsinformatics.gfatm.integration.cad4tb.model.XRayResult;
 import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
+import com.ihsinformatics.util.ChecksumUtil;
 import com.ihsinformatics.util.CommandType;
 import com.ihsinformatics.util.DatabaseUtil;
 import com.ihsinformatics.util.DateTimeUtil;
@@ -151,21 +152,26 @@ public class Cad4tbServlet extends HttpServlet {
 	public void processUploadedResults(String content) {
 		if (content == null) {
 			out.print("ERROR! Data could not be read from the file.");
+			return;
 		}
 		String[] rows = content.split("\r\n");
 		// Read and match the header
 		String header = rows[0];
 		if (!checkHeader(header.toLowerCase())) {
 			out.print("ERROR! File header is missing one or more mandatory columns.");
+			return;
 		}
 		headerIndices = detectIndices(header);
 		if (!checkDateRange(rows)) {
 			out.print("ERROR! Multiple dates detected! Data can only be processed for a single date per file.");
+			return;
 		}
+		out.print("PatientID,Date,Result,Description\r\n");
 		for (int i = 1; i < rows.length; i++) {
 			String result = processRow(headerIndices, rows[i]);
-			log.info(result);
-			out.print(result);
+			if (!result.replace("\r\n", "").trim().equals("")) {
+				out.print(result);
+			}
 		}
 	}
 
@@ -247,22 +253,43 @@ public class Cad4tbServlet extends HttpServlet {
 			XRayOrder xrayOrder = null;
 			// Skip invalid PatientIDs
 			if (!patientId.matches(Constant.PATIENT_ID_REGEX)) {
-				return "Patient ID " + patientId + " is either missing or does not match the required pattern\r\n";
+				result.append(patientId + ",");
+				result.append(dateStr + ",");
+				result.append("WARNING,");
+				result.append("Patient ID is either missing or does not match the required pattern");
+				return result.append("\r\n").toString();
 			}
+			// Match check digit
+			try {
+				result.append(patientId + ",");
+				result.append(dateStr + ",");
+				result.append("WARNING,");
+				result.append("Patient ID is incorrectly written");
+				result.append("\r\n").toString();
+				String id = patientId.substring(0, 5);
+				int checksum = Integer.parseInt(patientId.substring(6));
+				if (!ChecksumUtil.matchLuhnChecksum(id, checksum)) {
+					return result.toString();
+				}
+			} catch (Exception e) {
+				return result.toString();
+			}
+			result = new StringBuilder();
 			List<XRayOrder> orders = openmrs.getXRayOrders(patientId, studyDate);
 			// Check if any order exists
 			if (orders.isEmpty()) {
-				result.append("No order was found for PatientID: ");
-				result.append(patientId + " ");
-				result.append("(" + DateTimeUtil.toSqlDateString(studyDate) + ")");
+				result.append(patientId + ",");
+				result.append(dateStr + ",");
+				result.append("WARNING,");
+				result.append("No order was found on " + DateTimeUtil.toSqlDateString(studyDate));
 				return result.append("\r\n").toString();
 			}
 			// Get closest OrderReturn the latest X-ray in the group
-			for (XRayOrder xRayResult : orders) {
+			for (XRayOrder order : orders) {
 				if (xrayOrder == null) {
-					xrayOrder = xRayResult;
-				} else if (xrayOrder.getEncounterDatetime().before(studyDate)) {
-					xrayOrder = xRayResult;
+					xrayOrder = order;
+				} else if (order.getEncounterDatetime().after(xrayOrder.getEncounterDatetime())) {
+					xrayOrder = order;
 				}
 			}
 			XRayResult xrayResult = new XRayResult();
@@ -277,16 +304,22 @@ public class Cad4tbServlet extends HttpServlet {
 			}
 			xrayResult.setTestResultDate(studyDate);
 			if (openmrs.xrayResultExists(xrayOrder.getPatientGeneratedId(), xrayOrder.getOrderId())) {
-				result.append("INFO! Result already exists for " + xrayOrder.getPatientIdentifier());
-				result.append(" againts Order ID " + xrayOrder.getOrderId());
+				result.append(patientId + ",");
+				result.append(dateStr + ",");
+				result.append("INFO,");
+				result.append("Result already exists againts Order ID " + xrayOrder.getOrderId());
 				return result.append("\r\n").toString();
 			}
 			boolean saved = openmrs.saveXrayResult(xrayOrder.getPatientGeneratedId(), xrayOrder.getLocationId(),
 					cad4tbUserId, xrayOrder.getDateCreated(), xrayResult);
+			result.append(patientId + ",");
+			result.append(dateStr + ",");
 			if (saved) {
-				result.append("SUCCESS! Result saved for " + xrayOrder.getPatientIdentifier());
+				result.append("SUCCESS,");
+				result.append("Result saved for Order ID " + xrayOrder.getOrderId());
 			} else {
-				result.append("WARNING! Result could not be saved for " + xrayOrder.getPatientIdentifier());
+				result.append("ERROR,");
+				result.append("Result saved for Order ID " + xrayOrder.getOrderId());
 			}
 		} catch (Exception e) {
 		}
