@@ -17,6 +17,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.xml.bind.ValidationException;
 
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
@@ -149,6 +150,11 @@ public class Cad4tbServlet extends HttpServlet {
 		}
 	}
 
+	/**
+	 * Execute process to import results from content into OpenMRS
+	 * 
+	 * @param content
+	 */
 	public void processUploadedResults(String content) {
 		if (content == null) {
 			out.print("ERROR! Data could not be read from the file.");
@@ -168,11 +174,95 @@ public class Cad4tbServlet extends HttpServlet {
 		}
 		out.print("PatientID,Date,Result,Description\r\n");
 		for (int i = 1; i < rows.length; i++) {
-			String result = processRow(headerIndices, rows[i]);
-			if (!result.replace("\r\n", "").trim().equals("")) {
-				out.print(result);
+			// Apply all validation rules on PatientID
+			String patientId = getPatientIdFromRow(rows[i]);
+			if (validatePatient(patientId, rows)) {
+				String result = processRow(rows[i]);
+				if (!result.replace("\r\n", "").trim().equals("")) {
+					out.print(result);
+				}
 			}
 		}
+	}
+
+	/**
+	 * Applies validation rules on PatientID: Format, checksum, duplicates and
+	 * patient exists
+	 * 
+	 * @param patientId
+	 * @param rows
+	 * @return
+	 */
+	public boolean validatePatient(String patientId, String[] rows) {
+		// Skip invalid PatientIDs
+		if (!patientId.matches(Constant.PATIENT_ID_REGEX)) {
+			out.println(new StringBuilder(patientId + ",").append(",").append("WARNING,")
+					.append("Patient ID is either missing or does not match the required pattern"));
+			return false;
+		}
+		// Match check digit
+		try {
+			String id = patientId.substring(0, 5);
+			int checksum = Integer.parseInt(patientId.substring(6));
+			if (!ChecksumUtil.matchLuhnChecksum(id, checksum)) {
+				throw new ValidationException("");
+			}
+		} catch (Exception e) {
+			out.println(new StringBuilder(patientId + ",").append(",").append("WARNING,")
+					.append("Patient ID is written incorrectly"));
+			return false;
+		}
+		// Check for duplicates
+		if (duplicateResultsExist(rows, patientId)) {
+			out.println(
+					new StringBuilder(patientId + ",").append(",").append("INFO,").append("Duplicate results found"));
+			return false;
+		}
+		// Check if the Patient exists
+		if (!patientExists(patientId)) {
+			out.println(new StringBuilder(patientId + ",").append(",").append("WARNING,")
+					.append("Patient does not exist in OpenMRS"));
+			return false;
+		}
+		return true;
+	}
+
+	private boolean patientExists(String patientId) {
+		try {
+			long rows = dbUtil.getTotalRows("patient_identifier", "WHERE identifier = '" + patientId + "'");
+			return rows > 0;
+		} catch (SQLException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Detects if the PatientID in given row exists more than once in all rows
+	 * 
+	 * @param rows
+	 * @param row
+	 * @return
+	 */
+	public boolean duplicateResultsExist(String[] rows, String patientId) {
+		// Since we are counting the row itself as well
+		int count = 0;
+		for (String r : rows) {
+			String duplicate = getPatientIdFromRow(r);
+			if (duplicate.equals(patientId)) {
+				count++;
+			}
+		}
+		return (count > 1);
+	}
+
+	/**
+	 * Fetch PatientID from given row
+	 * 
+	 * @param row
+	 * @return
+	 */
+	public String getPatientIdFromRow(String row) {
+		return row.split(",")[headerIndices.get("PatientID")].toUpperCase();
 	}
 
 	/**
@@ -240,7 +330,7 @@ public class Cad4tbServlet extends HttpServlet {
 	 * @throws IllegalAccessException
 	 * @throws InstantiationException
 	 */
-	public String processRow(Map<String, Integer> headerIndices, String row) {
+	public String processRow(String row) {
 		StringBuilder result = new StringBuilder();
 		try {
 			String[] parts = row.split(",");
@@ -251,29 +341,6 @@ public class Cad4tbServlet extends HttpServlet {
 			String dateTimeStr = dateStr + timeStr;
 			Date studyDate = DateTimeUtil.fromString(dateTimeStr, DateTimeUtil.SQL_DATE + "HHmmss");
 			XRayOrder xrayOrder = null;
-			// Skip invalid PatientIDs
-			if (!patientId.matches(Constant.PATIENT_ID_REGEX)) {
-				result.append(patientId + ",");
-				result.append(dateStr + ",");
-				result.append("WARNING,");
-				result.append("Patient ID is either missing or does not match the required pattern");
-				return result.append("\r\n").toString();
-			}
-			// Match check digit
-			try {
-				result.append(patientId + ",");
-				result.append(dateStr + ",");
-				result.append("WARNING,");
-				result.append("Patient ID is incorrectly written");
-				result.append("\r\n").toString();
-				String id = patientId.substring(0, 5);
-				int checksum = Integer.parseInt(patientId.substring(6));
-				if (!ChecksumUtil.matchLuhnChecksum(id, checksum)) {
-					return result.toString();
-				}
-			} catch (Exception e) {
-				return result.toString();
-			}
 			result = new StringBuilder();
 			List<XRayOrder> orders = openmrs.getXRayOrders(patientId, studyDate);
 			// Check if any order exists

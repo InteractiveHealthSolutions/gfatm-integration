@@ -65,7 +65,7 @@
 					if (msg == 'AUTH_ERROR') {
 						alert("ERROR! Please provide valid OpenMRS login (Program Manager/System Developer)");
 					} else {
-						document.getElementById("logTextarea").value = msg;
+						document.getElementById("logTextarea").value += msg;
 					}
 					$("#uploadButton").prop("disabled", false);
 				},
@@ -121,7 +121,7 @@
 				<div class="form-group shadow-textarea">
 					<label for="logTextarea">Process log</label>
 					<textarea class="form-control z-depth-1" id="logTextarea" rows="15"
-						placeholder="Upload the file. Some text will eventually arrive here..."></textarea>
+						placeholder="Please submit the file and wait. Some text will eventually arrive here..."></textarea>
 				</div>
 			</form>
 		</div>

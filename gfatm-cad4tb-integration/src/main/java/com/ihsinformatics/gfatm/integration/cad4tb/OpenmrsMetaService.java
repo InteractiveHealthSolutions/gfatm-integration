@@ -86,7 +86,7 @@ public class OpenmrsMetaService {
 		query.append(
 				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
 		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
-		query.append("and e.date_created between '" + DateTimeUtil.toSqlDateTimeString(start) + "' and '"
+		query.append("and e.encounter_datetime between '" + DateTimeUtil.toSqlDateTimeString(start) + "' and '"
 				+ DateTimeUtil.toSqlDateTimeString(end) + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
 		List<XRayOrder> orders = new ArrayList<XRayOrder>();
@@ -122,7 +122,7 @@ public class OpenmrsMetaService {
 		query.append(
 				"inner join patient_identifier as pid on pid.patient_id = e.patient_id and pid.identifier_type = 3 and pid.voided = 0 ");
 		query.append("where e.voided = 0 and e.encounter_type = " + Constant.XRAY_ORDER_ENCOUNTER_TYPE + " ");
-		query.append("and datediff(e.encounter_datetime, '" + DateTimeUtil.toSqlDateTimeString(orderDate) + "') < 7 ");
+		query.append("and datediff(e.encounter_datetime, '" + DateTimeUtil.toSqlDateString(orderDate) + "') <= 1 ");
 		query.append("and pid.identifier = '" + patientIdentifier + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
 		List<XRayOrder> orders = new ArrayList<XRayOrder>();
