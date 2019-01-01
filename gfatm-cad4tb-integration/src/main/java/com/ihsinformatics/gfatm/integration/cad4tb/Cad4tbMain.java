@@ -8,28 +8,30 @@ See the GNU General Public License for more details. You should have received a 
 You can also access the license on the internet at the address: http://www.gnu.org/licenses/gpl-3.0.html
 
 Interactive Health Solutions, hereby disclaims all copyright interest in this program written by the contributors.
- */
-package com.ihsinformatics.gfatm.integration.gxalert;
+*/
+package com.ihsinformatics.gfatm.integration.cad4tb;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.management.ManagementFactory;
 import java.util.Date;
 import java.util.Properties;
 
 import org.apache.log4j.Logger;
 import org.joda.time.DateTime;
 
+import com.ihsinformatics.gfatm.integration.cad4tb.shared.Constant;
 import com.ihsinformatics.util.DateTimeUtil;
 
 /**
- * 
  * @author owais.hussain@ihsinformatics.com
  *
  */
-public class GxAlertMain {
+public class Cad4tbMain {
 
-	private static final Logger log = Logger.getLogger(GxAlertMain.class);
-	private static final String PROP_FILE_NAME = "gfatm-gxalert-integration.properties";
+	public static final boolean DEBUG_MODE = ManagementFactory.getRuntimeMXBean().getInputArguments().toString()
+			.indexOf("-agentlib:jdwp") > 0;
+	private static final Logger log = Logger.getLogger(Cad4tbMain.class);
 
 	public static void main(String[] args) {
 		try {
@@ -48,7 +50,7 @@ public class GxAlertMain {
 					usage.append("Command usage:\r\n");
 					usage.append("-a to import all results day-by-day\r\n");
 					usage.append(
-							"-r to import all results for a specific date (yyyy-MM-dd). E.g. gfatm-gxalert-integration-xxx.jar -r 2017-12-31\r\n");
+							"-r to import all results for a specific date (yyyy-MM-dd). E.g. gfatm-cad4tb-integration-xxx.jar -r 2017-12-31\r\n");
 					usage.append("-h or -help or --help or -? to display parameters on console\r\n");
 					usage.append("NO parameters to auto-import from last encounter date to current date\r\n");
 					log.info(usage.toString());
@@ -65,7 +67,8 @@ public class GxAlertMain {
 					}
 				}
 			}
-			GxAlertImportService service = new GxAlertImportService(readProperties());
+			Cad4tbImportService service = new Cad4tbImportService();
+			service.initialize(readProperties());
 			// Import all results
 			if (doImportAll) {
 				service.importAll();
@@ -88,9 +91,11 @@ public class GxAlertMain {
 	 * @throws IOException
 	 */
 	public static Properties readProperties() throws IOException {
-		InputStream inputStream = Thread.currentThread().getContextClassLoader().getResourceAsStream(PROP_FILE_NAME);
+		InputStream inputStream = Thread.currentThread().getContextClassLoader()
+				.getResourceAsStream(Constant.PROP_FILE_NAME);
 		Properties properties = new Properties();
 		properties.load(inputStream);
 		return properties;
 	}
+
 }

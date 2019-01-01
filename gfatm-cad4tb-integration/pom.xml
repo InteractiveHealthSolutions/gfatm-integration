@@ -1,18 +1,13 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
 	<groupId>com.ihsinformatics.gfatm</groupId>
-	<artifactId>gfatm-gxalert-integration</artifactId>
-	<version>1.8.0</version>
-	<packaging>jar</packaging>
-
-	<name>gfatm-gxalert-integration</name>
-	<url>http://maven.apache.org</url>
-
-	<properties>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-	</properties>
+	<artifactId>gfatm-cad4tb-integration</artifactId>
+	<version>1.0.0</version>
+	<name>gfatm-cad4tb-integration</name>
+	<description>Integration service for GFATM with Delft's cloud (Thirona) for CAD4TB Results</description>
 
 	<dependencies>
 		<dependency>
@@ -47,35 +42,27 @@
 			<version>5.1.45</version>
 		</dependency>
 		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<version>1.18.2</version>
+		</dependency>
+		<dependency>
 			<groupId>com.ihsinformatics</groupId>
 			<artifactId>utilities</artifactId>
-			<version>1.5.8</version>
+			<version>1.6.0</version>
 		</dependency>
 	</dependencies>
 
 	<build>
+		<sourceDirectory>src</sourceDirectory>
 		<plugins>
 			<plugin>
-				<artifactId>maven-assembly-plugin</artifactId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.7.0</version>
 				<configuration>
-					<archive>
-						<manifest>
-							<mainClass>com.ihsinformatics.gfatm.integration.GxAlertMain</mainClass>
-						</manifest>
-					</archive>
-					<descriptorRefs>
-						<descriptorRef>jar-with-dependencies</descriptorRef>
-					</descriptorRefs>
+					<source>1.8</source>
+					<target>1.8</target>
 				</configuration>
-				<executions>
-					<execution>
-						<id>make-assembly</id> <!-- this is used for inheritance merges -->
-						<phase>package</phase> <!-- bind to the packaging phase -->
-						<goals>
-							<goal>single</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>

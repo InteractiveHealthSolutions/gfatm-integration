@@ -147,14 +147,15 @@ public class GxAlertImportService {
 		if (dateStr != null) {
 			start = new DateTime(DateTimeUtil.fromSqlDateString(dateStr));
 		}
-		DateTime end = start.plusHours(fetchDurationHours);
+		// Ehtiyatan, wait for 1 hour after the test is complete
+		DateTime end = new DateTime().minusHours(1);
 		run(start, end);
 	}
 
 	/**
 	 * Fetches last update date from Encounter table against
-	 * {@code Constant.GXP_ENCOUNTER_TYPE} and for every date, new results are fetched
-	 * and stored
+	 * {@code Constant.GXP_ENCOUNTER_TYPE} and for every date, new results are
+	 * fetched and stored
 	 * 
 	 * @throws MalformedURLException
 	 * @throws JSONException
@@ -428,7 +429,7 @@ public class GxAlertImportService {
 		queries.add(query.toString());
 
 		// Query for MTB Burden observation
-		if (gxp.getMtbResult().equals("DETECTED")) {
+		if (gxp.getMtbResult().equals(Constant.DETECTED)) {
 			query = getMtbBurdenQuery(patientId, encounterLocationId, gxAlertUserId, encounterId, obsDate,
 					insertQueryPrefix, gxp.getMtbBurden());
 			queries.add(query.toString());
@@ -436,8 +437,8 @@ public class GxAlertImportService {
 
 		// Query for RIF result observation
 		if (gxp.getRifResult() != null) {
-			boolean rifDetected = gxp.getRifResult().equals("DETECTED");
-			boolean rifIndeterminate = gxp.getMtbResult().equals("INDETERMINATE");
+			boolean rifDetected = gxp.getRifResult().equals(Constant.DETECTED);
+			boolean rifIndeterminate = gxp.getMtbResult().equals(Constant.INDETERMINATE);
 			query = getRifResultQuery(patientId, encounterLocationId, gxAlertUserId, encounterId, obsDate,
 					insertQueryPrefix, rifDetected, rifIndeterminate);
 			queries.add(query.toString());
@@ -619,15 +620,15 @@ public class GxAlertImportService {
 		query = new StringBuilder(insertQueryPrefix);
 		query.append("(0," + patientId + "," + Constant.MTB_BURDEN_CONCEPT + "," + encounterId + ",");
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
-		if (mtbBurden.equals("HIGH")) {
+		if (mtbBurden.equals(Constant.HIGH)) {
 			query.append(Constant.HIGH_CONCEPT + ",");
-		} else if (mtbBurden.equals("MEDIUM")) {
+		} else if (mtbBurden.equals(Constant.MEDIUM)) {
 			query.append(Constant.MEDIUM_CONCEPT + ",");
-		} else if (mtbBurden.equals("LOW")) {
+		} else if (mtbBurden.equals(Constant.LOW)) {
 			query.append(Constant.LOW_CONCEPT + ",");
-		} else if (mtbBurden.equals("VERY LOW")) {
+		} else if (mtbBurden.equals(Constant.VERY_LOW)) {
 			query.append(Constant.VERY_LOW_CONCEPT + ",");
-		} else if (mtbBurden.equals("TRACE")) {
+		} else if (mtbBurden.equals(Constant.TRACE)) {
 			query.append(Constant.TRACE_CONCEPT + ",");
 		}
 		query.append("NULL,NULL,NULL,'Auto-saved by GXAlert.',");
@@ -639,10 +640,10 @@ public class GxAlertImportService {
 
 	public StringBuilder getGxpResultQuery(int patientId, int encounterLocationId, int gxAlertUserId,
 			Integer encounterId, Date obsDate, String insertQueryPrefix, String mtbResult) {
-		boolean mtbDetected = mtbResult.equals("DETECTED");
-		boolean error = mtbResult.equals("ERROR");
-		boolean noResult = mtbResult.equals("NO RESULT");
-		boolean invalid = mtbResult.equals("INVALID");
+		boolean mtbDetected = mtbResult.equals(Constant.DETECTED);
+		boolean error = mtbResult.equals(Constant.ERROR);
+		boolean noResult = mtbResult.equals(Constant.NO_RESULT);
+		boolean invalid = mtbResult.equals(Constant.INVALID);
 		StringBuilder query;
 		query = new StringBuilder(insertQueryPrefix);
 		query.append("(0," + patientId + "," + Constant.GXP_RESULT_CONCEPT + "," + encounterId + ",");
