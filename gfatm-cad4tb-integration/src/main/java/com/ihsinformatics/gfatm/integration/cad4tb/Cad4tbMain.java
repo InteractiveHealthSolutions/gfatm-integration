@@ -68,6 +68,7 @@ public class Cad4tbMain {
 				}
 			}
 			Cad4tbImportService service = new Cad4tbImportService();
+			log.info("Initializing properties...");
 			service.initialize(readProperties());
 			// Import all results
 			if (doImportAll) {

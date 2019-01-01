@@ -111,4 +111,64 @@ public class XRayOrder implements Serializable {
 	public void setOrderId(String orderId) {
 		this.orderId = orderId;
 	}
+	
+
+	/* (non-Javadoc)
+	 * @see java.lang.Object#hashCode()
+	 */
+	@Override
+	public int hashCode() {
+		final int prime = 29;
+		int result = 1;
+		result = prime * result + ((encounterDatetime == null) ? 0 : encounterDatetime.hashCode());
+		result = prime * result + ((locationId == null) ? 0 : locationId.hashCode());
+		result = prime * result + ((patientGeneratedId == null) ? 0 : patientGeneratedId.hashCode());
+		result = prime * result + ((patientIdentifier == null) ? 0 : patientIdentifier.hashCode());
+		result = prime * result + ((dateCreated == null) ? 0 : dateCreated.hashCode());
+		return result;
+	}
+
+	/* (non-Javadoc)
+	 * @see java.lang.Object#equals(java.lang.Object)
+	 */
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		XRayOrder other = (XRayOrder) obj;
+		if (encounterDatetime == null) {
+			if (other.encounterDatetime != null)
+				return false;
+		} else if (!encounterDatetime.equals(other.encounterDatetime))
+			return false;
+		if (locationId == null) {
+			if (other.locationId != null)
+				return false;
+		} else if (!locationId.equals(other.locationId))
+			return false;
+		if (patientGeneratedId == null) {
+			if (other.patientGeneratedId != null)
+				return false;
+		} else if (!patientGeneratedId.equals(other.patientGeneratedId))
+			return false;
+		if (patientIdentifier == null) {
+			if (other.patientIdentifier != null)
+				return false;
+		} else if (!patientIdentifier.equals(other.patientIdentifier))
+			return false;
+		return true;
+	}
+
+	/* (non-Javadoc)
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		return patientGeneratedId + ", " + patientIdentifier + ", " + locationId + ", " + encounterDatetime + ", "
+				+ orderId;
+	}
 }

@@ -80,15 +80,15 @@ public class Cad4tbImportService {
 			log.fatal("Unable to connect with database using " + dbUtil.toString());
 			System.exit(0);
 		}
+		openmrs = new OpenmrsMetaService(dbUtil);
 		// Get CAD4TB user from properties and set mapping ID by searching in OpenMRS
-		Object userId = dbUtil.runCommand(CommandType.SELECT,
-				"select user_id from users where username = '" + username + "'");
+		Object userId = dbUtil.runCommand(CommandType.SELECT, "select user_id from users where username = '"
+				+ properties.getProperty("cad4tb.openmrs.username") + "'");
 		if (userId != null) {
 			cad4tbUserId = Integer.parseInt(userId.toString());
 			return;
 		}
 		cad4tbUserId = Integer.parseInt(properties.getProperty("cad4tb.openmrs.user_id"));
-		openmrs = new OpenmrsMetaService(dbUtil);
 	}
 
 	/**
@@ -164,7 +164,8 @@ public class Cad4tbImportService {
 			IllegalAccessException, ClassNotFoundException, ParseException, SQLException {
 		start = start.withHourOfDay(0).withMinuteOfHour(0).withSecondOfMinute(0);
 		DateTime end = start.plusDays(1).minusSeconds(1);
-		processOrders(openmrs.getXRayOrders(start.toDate(), end.toDate()));
+		List<XRayOrder> xRayOrders = openmrs.getXRayOrders(start.toDate(), end.toDate());
+		processOrders(xRayOrders);
 	}
 
 	/**
@@ -189,12 +190,10 @@ public class Cad4tbImportService {
 			xRayResult.setOrderId(order.getOrderId());
 			try {
 				boolean success = processResult(xRayResult, order);
-				log.info("Imported result for " + xRayResult.getPatientId() + (success ? ": YES" : ": NO"));
-				try {
-					Thread.sleep(fetchDelay);
-				} catch (Exception e) {
-					log.error(e.getMessage());
+				if (success) {
+					log.info("Imported result for " + xRayResult.getPatientId() + (success ? ": YES" : ": NO"));
 				}
+				Thread.sleep(fetchDelay);
 			} catch (Exception e1) {
 				log.error(e1.getMessage());
 			}

@@ -89,7 +89,7 @@ public class OpenmrsMetaService {
 		query.append("and e.encounter_datetime between '" + DateTimeUtil.toSqlDateTimeString(start) + "' and '"
 				+ DateTimeUtil.toSqlDateTimeString(end) + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
-		List<XRayOrder> orders = new ArrayList<XRayOrder>();
+		List<XRayOrder> orders = new ArrayList<>();
 		for (Object[] row : xrayOrders) {
 			int k = 0;
 			XRayOrder order = new XRayOrder();
@@ -98,9 +98,10 @@ public class OpenmrsMetaService {
 			order.setLocationId(Integer.valueOf(row[k++].toString()));
 			order.setEncounterDatetime(DateTimeUtil.fromSqlDateString(row[k++].toString()));
 			order.setDateCreated(DateTimeUtil.fromSqlDateTimeString(row[k++].toString()));
-			order.setOrderId(row[k++].toString());
+			order.setOrderId(row[k].toString());
+			orders.add(order);
 		}
-		return orders;
+		return filterDuplicates(orders);
 	}
 
 	/**
@@ -125,7 +126,7 @@ public class OpenmrsMetaService {
 		query.append("and datediff(e.encounter_datetime, '" + DateTimeUtil.toSqlDateString(orderDate) + "') <= 1 ");
 		query.append("and pid.identifier = '" + patientIdentifier + "'");
 		Object[][] xrayOrders = dbUtil.getTableData(query.toString());
-		List<XRayOrder> orders = new ArrayList<XRayOrder>();
+		List<XRayOrder> orders = new ArrayList<>();
 		for (Object[] row : xrayOrders) {
 			int k = 0;
 			XRayOrder order = new XRayOrder();
@@ -134,10 +135,33 @@ public class OpenmrsMetaService {
 			order.setLocationId(Integer.valueOf(row[k++].toString()));
 			order.setEncounterDatetime(DateTimeUtil.fromSqlDateString(row[k++].toString()));
 			order.setDateCreated(DateTimeUtil.fromSqlDateTimeString(row[k++].toString()));
-			order.setOrderId(row[k++].toString());
+			order.setOrderId(row[k].toString());
 			orders.add(order);
 		}
-		return orders;
+		return filterDuplicates(orders);
+	}
+
+	/**
+	 * Filters all patients which have multiple orders in a date
+	 * 
+	 * @param orders
+	 * @return
+	 */
+	public List<XRayOrder> filterDuplicates(List<XRayOrder> orders) {
+		List<XRayOrder> list = new ArrayList<>();
+		for (int i = 0; i < orders.size(); i++) {
+			int count = 1;
+			for (int j = 0; j < orders.size(); j++) {
+				if (i != j && orders.get(i).equals(orders.get(j))) {
+					count++;
+					break;
+				}
+			}
+			if (count == 1) {
+				list.add(orders.get(i));
+			}
+		}
+		return list;
 	}
 
 	/**
@@ -156,8 +180,7 @@ public class OpenmrsMetaService {
 			query.append(
 					"inner join obs as ord on ord.encounter_id = e.encounter_id and ord.voided = 0 and ord.concept_id = "
 							+ Constant.ORDER_ID_CONCEPT + " ");
-			query.append("where e.voided = 0 ");
-			query.append("and e.encounter_type = " + Constant.XRAY_RESULT_ENCOUNTER_TYPE + " ");
+			query.append("where e.encounter_type = " + Constant.XRAY_RESULT_ENCOUNTER_TYPE + " ");
 			query.append("and e.patient_id = " + patientId + " ");
 			query.append("and ord.value_text = '" + orderId + "'");
 			Object obj = dbUtil.runCommandWithException(CommandType.SELECT, query.toString());
@@ -182,7 +205,7 @@ public class OpenmrsMetaService {
 	public boolean saveXrayResult(Integer patientId, Integer encounterLocationId, Integer cad4tbUserId,
 			Date dateEncounterCreated, XRayResult xrayResult)
 			throws InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException {
-		List<String> queries = new ArrayList<String>();
+		List<String> queries = new ArrayList<>();
 		// Save Encounter
 		StringBuilder query = new StringBuilder(
 				"INSERT INTO encounter (encounter_id, encounter_type, patient_id, location_id, encounter_datetime, creator, date_created, uuid) VALUES ");
@@ -199,8 +222,7 @@ public class OpenmrsMetaService {
 		// making "that" suggestion
 
 		// No execution in test mode
-		// if (!Cad4tbMain.DEBUG_MODE)
-		{
+		if (!Cad4tbMain.DEBUG_MODE) {
 			Connection con = dbUtil.getConnection();
 			PreparedStatement ps = con.prepareStatement(query.toString());
 			ps.executeUpdate(query.toString(), Statement.RETURN_GENERATED_KEYS);
@@ -211,7 +233,6 @@ public class OpenmrsMetaService {
 			rs.close();
 			ps.close();
 		}
-
 		Date obsDate = new Date();
 		try {
 			obsDate = xrayResult.getTestResultDate();
@@ -237,14 +258,11 @@ public class OpenmrsMetaService {
 		query = getXRayPresumptiveTbQuery(patientId, encounterLocationId, cad4tbUserId, encounterId, obsDate,
 				xrayResult);
 		queries.add(query.toString());
-
 		for (String q : queries) {
 			try {
-//				if (Cad4tbMain.DEBUG_MODE) {
-//					log.info("Skipping query due to test mode." + q);
-//					return true;
-//				}
-				dbUtil.runCommandWithException(CommandType.INSERT, q);
+				if (!Cad4tbMain.DEBUG_MODE) {
+					dbUtil.runCommandWithException(CommandType.INSERT, q);
+				}
 			} catch (Exception e) {
 				StringBuilder message = new StringBuilder();
 				message.append("Query failed: ");

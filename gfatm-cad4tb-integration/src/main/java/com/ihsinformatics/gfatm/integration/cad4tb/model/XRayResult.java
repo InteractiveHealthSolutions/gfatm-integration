@@ -286,4 +286,14 @@ public class XRayResult implements Serializable {
 		xray.setTestResultDate(DateTimeUtil.fromString(modifiedDate, Constant.DATE_FORMAT));
 		return xray;
 	}
+
+	/*
+	 * (non-Javadoc)
+	 * 
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		return patientId + ", " + cad4tbScore + ", " + testResultDate + ", " + orderId;
+	}
 }
