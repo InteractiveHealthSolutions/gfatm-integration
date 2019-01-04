@@ -293,7 +293,8 @@ public class OpenmrsMetaService {
 		StringBuilder query = new StringBuilder(queryPrefix);
 		query.append("(0," + patientId + "," + Constant.CAD4TB_SCORE_CONCEPT + "," + encounterId + ",");
 		query.append("'" + DateTimeUtil.toSqlDateTimeString(obsDate) + "'," + encounterLocationId + ",NULL,");
-		query.append(xray.getCad4tbScore() + ",'Auto-saved by CAD4TB Integration Service.',");
+		int score = new Double(Math.floor(xray.getCad4tbScore())).intValue();
+		query.append(score + ",'Auto-saved by CAD4TB Integration Service.',");
 		query.append(cad4tbUserId + ",");
 		query.append("current_timestamp(),0,uuid())");
 		return query;
