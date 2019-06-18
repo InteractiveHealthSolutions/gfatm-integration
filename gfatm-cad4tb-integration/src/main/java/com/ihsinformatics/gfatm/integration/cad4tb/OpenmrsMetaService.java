@@ -69,7 +69,7 @@ public class OpenmrsMetaService {
 
 	/**
 	 * Returns XRay orders as list of Object arrays from Encounters between given
-	 * stard and end date
+	 * started and end date
 	 * 
 	 * @param start
 	 * @param end
